@@ -1,0 +1,47 @@
+[
+  {
+    "scene_number": 1,
+    "camera_direction": "Establishing shot, slow zoom-in",
+    "visual_description": "A high-tech cyberpunk skyscraper, neon signs glowing in the rain, but with traditional Chinese Taoist temple roofs on top. Flying glowing swords (cyber-swords) weaving through the neon-lit flying cars.",
+    "character_on_screen": "None",
+    "midjourney_prompt": "A massive cyberpunk skyscraper with traditional Chinese Taoist temple roofs on top, neon signs in Chinese characters, rain falling, flying swords like glowing blue lasers weaving through flying futuristic vehicles, epic scale, cinematic lighting, photorealistic, 8k resolution, vaporwave color scheme --ar 16:9 --v 6.0",
+    "dialogue": "旁白：大元历三零二六年，科技已达巅峰，而修仙……成了财阀垄断的终极商品。",
+    "sound_effects": "Low hum of flying cars, crackle of electric neon, rain pattering, ethereal synth music swelling."
+  },
+  {
+    "scene_number": 2,
+    "camera_direction": "Medium close-up, dramatic lighting from below",
+    "visual_description": "Our protagonist, Li Xuan (20s, sharp chin, neon blue cybernetic eye glowing, messy dark hair with a few white streaks, wearing a high-collared futuristic black leather trench coat with integrated jade talismans on the collar). He looks determined and slightly tired, standing on a rainy balcony.",
+    "character_on_screen": "Li Xuan (Protagonist)",
+    "midjourney_prompt": "A close up shot of a 25 year old handsome male Chinese cultivator, messy dark hair with silver white streaks, glowing neon blue cybernetic eyes, wearing a black high-collar cyberpunk leather coat with glowing jade talismans on the collar, standing on a rainy balcony in a futuristic neon city, dramatic under-lighting, photorealistic, Unreal Engine 5 render --ar 16:9 --v 6.0",
+    "dialogue": "李轩：（握紧拳头，冷笑）终极商品？当财阀剥夺了普通人吸纳灵气的权力，这仙，不修也罢！",
+    "sound_effects": "Heavy rain falling, soft electric hum of his cybernetic eye, sudden heartbeat sound effect (thump-thump)."
+  },
+  {
+    "scene_number": 3,
+    "camera_direction": "Extreme close-up on his right hand",
+    "visual_description": "His hand is glowing with blue electronic circuit-like energy, which is converting into a traditional golden spiritual fire. A vintage mechanical smart-watch on his wrist displays 'Qi Density: 99.8%'.",
+    "character_on_screen": "Li Xuan's Hand",
+    "midjourney_prompt": "An extreme close up shot of a male hand glowing with bright blue electronic circuits transitioning into golden spiritual fire, a futuristic retro mechanical smartwatch on the wrist displaying high-tech holo-readouts, rain drops on the skin, macro photography, cinematic lighting, octane render --ar 16:9 --v 6.0",
+    "dialogue": "旁白：但是谁也没想到，这个被财阀废掉灵根的废柴，脑子里竟然植入了一个上古仙帝的量子灵魂芯片……",
+    "sound_effects": "High pitched electronic charging sound, crackle of spiritual fire, high-tech computer scanning beep."
+  },
+  {
+    "scene_number": 4,
+    "camera_direction": "Medium shot, dynamic action stance",
+    "visual_description": "Li Xuan jumps backward as three high-tech corporate guards in white robotic armor and glowing red energy spears attack. He raises his fingers in a sword-spell gesture.",
+    "character_on_screen": "Li Xuan, 3 Corporate Guards",
+    "midjourney_prompt": "A dynamic action shot, a handsome young Chinese cultivator in black coat dodging backward from three robotic armored guards with glowing red energy spears in a rainy neon cyberpunk street, sword-spell hand gesture, golden particles, dynamic composition, fast shutter speed, epic lighting, hyper-detailed --ar 16:9 --v 6.0",
+    "dialogue": "公司守卫：警报！捕获非法盗灵者！立即格杀！\n李轩：就凭你们这些公司的走狗？",
+    "sound_effects": "Siren wailing in the background, robotic mechanical footsteps, energy spear humming, loud swish of his movement."
+  },
+  {
+    "scene_number": 5,
+    "camera_direction": "Low angle, epic hero shot",
+    "visual_description": "Li Xuan's cybernetic eye glows intensely, and a massive golden holographic spectral dragon rises behind him, wrapping around the cyberpunk skyscrapers. He looks down at the camera.",
+    "character_on_screen": "Li Xuan",
+    "midjourney_prompt": "A low angle hero shot of a young Chinese cultivator in black leather coat, his eyes glowing intense neon blue, a massive golden holographic spectral Chinese dragon wrapping around neon cyberpunk skyscrapers behind him, rain drops in mid-air, epic composition, dramatic lighting, masterwork --ar 16:9 --v 6.0",
+    "dialogue": "李轩：仙帝芯片，启动！今天，我就夺回属于这凡间的所有灵气！\n（视频切断，黑屏）\n旁白：点击下方链接，阅读《赛博修仙：我脑中有仙帝芯片》后续精彩内容！",
+    "sound_effects": "Deafening dragon roar, digital explosion sound, massive bass drop, sudden silence followed by ticking clock sound."
+  }
+]

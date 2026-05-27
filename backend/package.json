@@ -1,0 +1,14 @@
+{
+  "name": "ai-comic-drama-backend",
+  "version": "1.0.0",
+  "description": "Backend service for 2026 AI Comic Drama Startup Kit",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7"
+  }
+}
