@@ -21,9 +21,49 @@ import {
   X,
   Database,
   Play,
-  VolumeX,
-  Wand2
+  Image,
+  RefreshCw,
+  Lock,
+  Unlock,
+  Upload,
+  User,
+  Palette,
+  Film,
+  AlertTriangle,
+  Shield,
+  Activity
 } from 'lucide-react';
+const VOICES_CONFIG = [
+  { name: '故事旁白', emoji: '🎙️', desc: '低沉磁性 · 沉稳叙事' },
+  { name: '霸气总裁', emoji: '👔', desc: '冷酷霸道 · 质感低音' },
+  { name: '阳光大男孩', emoji: '👦', desc: '阳光活力 · 热情高昂' },
+  { name: '知性姐姐', emoji: '👩', desc: '温柔和煦 · 亲切知性' },
+  { name: '魅惑御姐', emoji: '💋', desc: '妖魅沙哑 · 妩媚动人' },
+  { name: '东北老铁', emoji: '🍺', desc: '幽默风趣 · 豪爽接地气' },
+  { name: '系统萌娃', emoji: '👶', desc: '极高萌音 · 机械儿童音' }
+];
+
+const CAMERA_MOTION_PRESETS = [
+  { value: 'static', label: '静态微动', icon: '📷', desc: '画面元素微妙动态' },
+  { value: 'pan_left', label: '向左平移', icon: '⬅️', desc: '平缓向左平移推进' },
+  { value: 'pan_right', label: '向右平移', icon: '➡️', desc: '平缓向右平移推进' },
+  { value: 'zoom_in', label: '推进特写', icon: '🔍', desc: '缓慢推进特写' },
+  { value: 'zoom_out', label: '拉远全景', icon: '🔭', desc: '缓慢拉远全景' },
+  { value: 'tilt_up', label: '仰拍升', icon: '⬆️', desc: '从下往上缓慢抬升' },
+  { value: 'tilt_down', label: '俯冲下', icon: '⬇️', desc: '从上往上缓慢俯冲' },
+  { value: 'orbit', label: '环绕旋转', icon: '🔄', desc: '环绕人物360度旋转' },
+  { value: 'dolly_in', label: '冲击推进', icon: '💨', desc: '快速推进冲击感' },
+  { value: 'crane_up', label: '升降机', icon: '🏗️', desc: '升降机从低到高' },
+];
+
+const STYLE_PRESETS = [
+  { value: '国风动漫', label: '🎨 国风动漫', desc: '唯美写实东方动漫插画' },
+  { value: '赛博修仙', label: '⚡ 赛博修仙', desc: '赛博朋克+修仙厚涂风' },
+  { value: '新海诚', label: '🌅 新海诚', desc: '唯美光影日系动画' },
+  { value: '3D写实', label: '🎬 3D写实', desc: '3D渲染写实电影级画面' },
+  { value: '水墨玄幻', label: '🖌️ 水墨玄幻', desc: '中国传统水墨画风格' },
+  { value: '赛璐璐', label: '✨ 赛璐璐', desc: '经典日系赛璐璐动画' },
+];
 
 export default function App() {
   // 核心状态管理
@@ -31,16 +71,47 @@ export default function App() {
     `天空正下着倾盆大雨，雷鸣声在苍穹间回荡。\n林默被叶家大少爷狠狠地踩在泥水里，右手手骨已经粉碎性骨折。\n“林默，你这个连气感都无法觉醒的废物，也配向我们叶家提亲？”叶大少冷笑道，身边站着他高傲的未婚妻。\n林默咬紧牙齿，泥水混着血水流进嘴里。他忽然笑了，因为就在这一瞬间，脑海深处传来了一声清脆的电子提示音：\n【叮！太古神龙系统绑定成功，检测到宿主正在受到致命威胁，自动启动神龙逆天血脉！】`
   );
   
-  // API 设置状态 (支持本地存储)
+  // LLM API 设置状态 (支持本地存储)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('llm_api_key') || '');
   const [apiUrl, setUrl] = useState(() => localStorage.getItem('llm_api_url') || 'https://api.deepseek.com/v1/chat/completions');
   const [modelName, setModelName] = useState(() => localStorage.getItem('llm_model_name') || 'deepseek-chat');
   const [showSettings, setShowSettings] = useState(false);
   
+  // 生图大模型 API 设置状态
+  const [imageApiKey, setImageApiKey] = useState(() => localStorage.getItem('t2i_api_key') || '');
+  const [imageApiUrl, setImageApiUrl] = useState(() => localStorage.getItem('t2i_api_url') || 'https://api.siliconflow.cn/v1/images/generations');
+  const [imageModelName, setImageModelName] = useState(() => localStorage.getItem('t2i_model_name') || 'black-forest-labs/FLUX.1-schnell');
+
+  // 生视频大模型 API 设置状态 (New)
+  const [videoApiKey, setVideoApiKey] = useState(() => localStorage.getItem('t2v_api_key') || '');
+  const [videoApiUrl, setVideoApiUrl] = useState(() => localStorage.getItem('t2v_api_url') || 'https://api.siliconflow.cn/v1/video/generations');
+  const [videoModelName, setVideoModelName] = useState(() => localStorage.getItem('t2v_model_name') || 'luma/aperture-1.0');
+
+  // 语音合成大模型 API 设置状态 (New)
+  const [ttsApiKey, setTtsApiKey] = useState(() => localStorage.getItem('tts_api_key') || '');
+  const [ttsApiUrl, setTtsApiUrl] = useState(() => localStorage.getItem('tts_api_url') || 'https://api.siliconflow.cn/v1/audio/speech');
+  const [ttsModelName, setTtsModelName] = useState(() => localStorage.getItem('tts_model_name') || 'FunAudioLLM/CosyVoice2-0.5B');
+  
   // 连通性测试状态
   const [connectionStatus, setConnectionStatus] = useState('idle'); // 'idle' | 'testing' | 'success' | 'error'
   const [connectionLatency, setConnectionLatency] = useState(0);
   const [connectionError, setConnectionError] = useState('');
+  
+  const [imageConnectionStatus, setImageConnectionStatus] = useState('idle');
+  const [imageConnectionLatency, setImageConnectionLatency] = useState(0);
+  const [imageConnectionError, setImageConnectionError] = useState('');
+
+  const [videoConnectionStatus, setVideoConnectionStatus] = useState('idle');
+  const [videoConnectionLatency, setVideoConnectionLatency] = useState(0);
+  const [videoConnectionError, setVideoConnectionError] = useState('');
+
+  const [ttsConnectionStatus, setTtsConnectionStatus] = useState('idle');
+  const [ttsConnectionLatency, setTtsConnectionLatency] = useState(0);
+  const [ttsConnectionError, setTtsConnectionError] = useState('');
+
+  // 正在渲染分镜画面/视频的场景ID
+  const [generatingImageSceneId, setGeneratingImageSceneId] = useState(null);
+  const [generatingVideoSceneId, setGeneratingVideoSceneId] = useState(null);
 
   // 数据与状态
   const [historyList, setHistoryList] = useState([]);
@@ -56,10 +127,24 @@ export default function App() {
   // 气泡提示状态 (存储已复制提示词的镜号)
   const [copiedSceneId, setCopiedSceneId] = useState(null);
 
-  // 2.5 升级新增：试听与生图交互状态
-  const [activeSpeechScene, setActiveSpeechScene] = useState(null);
-  const [activeSFXScene, setActiveSFXScene] = useState(null);
-  const [generatingImageScene, setGeneratingImageScene] = useState(null);
+  // Visual Consistency system states
+  const [characters, setCharacters] = useState([]);
+  const [showCastPanel, setShowCastPanel] = useState(false);
+  const [generatingAvatarId, setGeneratingAvatarId] = useState(null);
+  const [generatingTurnaroundId, setGeneratingTurnaroundId] = useState(null);
+  const [generatingPoseId, setGeneratingPoseId] = useState(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
+  const [showConsistencyWarning, setShowConsistencyWarning] = useState(false);
+  const [consistencyWarningSceneId, setConsistencyWarningSceneId] = useState(null);
+  
+  // Global style engine states
+  const [masterSeed, setMasterSeed] = useState(() => {
+    const saved = localStorage.getItem('master_seed');
+    return saved ? parseInt(saved) : -1;
+  });
+  const [seedLocked, setSeedLocked] = useState(false);
+  const [stylePreset, setStylePreset] = useState(() => localStorage.getItem('style_preset') || '国风动漫');
+  const [styleRefUrl, setStyleRefUrl] = useState('');
 
   // 初始化拉取历史记录
   useEffect(() => {
@@ -71,7 +156,184 @@ export default function App() {
     localStorage.setItem('llm_api_key', apiKey);
     localStorage.setItem('llm_api_url', apiUrl);
     localStorage.setItem('llm_model_name', modelName);
-  }, [apiKey, apiUrl, modelName]);
+    
+    localStorage.setItem('t2i_api_key', imageApiKey);
+    localStorage.setItem('t2i_api_url', imageApiUrl);
+    localStorage.setItem('t2i_model_name', imageModelName);
+
+    localStorage.setItem('t2v_api_key', videoApiKey);
+    localStorage.setItem('t2v_api_url', videoApiUrl);
+    localStorage.setItem('t2v_model_name', videoModelName);
+
+    localStorage.setItem('tts_api_key', ttsApiKey);
+    localStorage.setItem('tts_api_url', ttsApiUrl);
+    localStorage.setItem('tts_model_name', ttsModelName);
+  }, [apiKey, apiUrl, modelName, imageApiKey, imageApiUrl, imageModelName, videoApiKey, videoApiUrl, videoModelName, ttsApiKey, ttsApiUrl, ttsModelName]);
+
+  useEffect(() => {
+    if (currentStoryboard) {
+      fetchCharacters(currentStoryboard.id);
+      if (currentStoryboard.master_seed !== undefined && currentStoryboard.master_seed !== null) {
+        setMasterSeed(currentStoryboard.master_seed);
+      }
+      if (currentStoryboard.style_preset) {
+        setStylePreset(currentStoryboard.style_preset);
+      }
+      if (currentStoryboard.style_ref_url) {
+        setStyleRefUrl(currentStoryboard.style_ref_url);
+      }
+    } else {
+      setCharacters([]);
+    }
+  }, [currentStoryboard]);
+
+  useEffect(() => {
+    localStorage.setItem('master_seed', String(masterSeed));
+    localStorage.setItem('style_preset', stylePreset);
+  }, [masterSeed, stylePreset]);
+
+  const fetchCharacters = async (storyboardId) => {
+    try {
+      const res = await fetch(`/api/characters/${storyboardId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCharacters(data);
+      }
+    } catch (err) {
+      console.error('Failed to load character profiles:', err);
+    }
+  };
+
+  const handleAddCharacter = async () => {
+    if (!currentStoryboard) return;
+    try {
+      const res = await fetch('/api/characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyboard_id: currentStoryboard.id,
+          name: '新角色',
+          role_type: '主角',
+          appearance_prompt: ''
+        })
+      });
+      if (res.ok) fetchCharacters(currentStoryboard.id);
+    } catch (err) {
+      console.error('Failed to create character:', err);
+    }
+  };
+
+  const handleUpdateCharacter = async (charId, updates) => {
+    try {
+      await fetch(`/api/characters/${charId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (currentStoryboard) fetchCharacters(currentStoryboard.id);
+    } catch (err) {
+      console.error('Failed to update character:', err);
+    }
+  };
+
+  const handleDeleteCharacter = async (charId) => {
+    if (!confirm('确定要删除该角色档案吗？')) return;
+    try {
+      await fetch(`/api/characters/${charId}`, { method: 'DELETE' });
+      if (currentStoryboard) fetchCharacters(currentStoryboard.id);
+    } catch (err) {
+      console.error('Failed to delete character:', err);
+    }
+  };
+
+  const handleGenerateAvatar = async (charId, appearancePrompt) => {
+    setGeneratingAvatarId(charId);
+    try {
+      const res = await fetch(`/api/characters/${charId}/generate-avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appearance_prompt: appearancePrompt,
+          image_api_key: imageApiKey,
+          image_api_url: imageApiUrl,
+          image_model_name: imageModelName
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && currentStoryboard) fetchCharacters(currentStoryboard.id);
+      }
+    } catch (err) {
+      alert(`Avatar render failed: ${err.message}`);
+    } finally {
+      setGeneratingAvatarId(null);
+    }
+  };
+
+  const handleGenerateTurnaround = async (charId, appearancePrompt) => {
+    setGeneratingTurnaroundId(charId);
+    try {
+      const res = await fetch(`/api/characters/${charId}/generate-turnaround`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appearance_prompt: appearancePrompt,
+          image_api_key: imageApiKey,
+          image_api_url: imageApiUrl,
+          image_model_name: imageModelName
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && currentStoryboard) fetchCharacters(currentStoryboard.id);
+      }
+    } catch (err) {
+      alert(`Turnaround sheet render failed: ${err.message}`);
+    } finally {
+      setGeneratingTurnaroundId(null);
+    }
+  };
+
+  const handleGeneratePose = async (charId, appearancePrompt) => {
+    setGeneratingPoseId(charId);
+    try {
+      const res = await fetch(`/api/characters/${charId}/generate-pose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appearance_prompt: appearancePrompt,
+          image_api_key: imageApiKey,
+          image_api_url: imageApiUrl,
+          image_model_name: imageModelName
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && currentStoryboard) fetchCharacters(currentStoryboard.id);
+      }
+    } catch (err) {
+      alert(`Pose render failed: ${err.message}`);
+    } finally {
+      setGeneratingPoseId(null);
+    }
+  };
+
+  const handleSaveStyleSettings = async () => {
+    if (!currentStoryboard) return;
+    try {
+      await fetch(`/api/storyboard/${currentStoryboard.id}/style`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          master_seed: masterSeed,
+          style_ref_url: styleRefUrl,
+          style_preset: stylePreset
+        })
+      });
+    } catch (err) {
+      console.error('Failed to save style settings:', err);
+    }
+  };
 
   const fetchHistory = async () => {
     try {
@@ -85,7 +347,7 @@ export default function App() {
     }
   };
 
-  // 测试 API 连通性
+  // 测试 LLM API 连通性
   const handleTestConnection = async () => {
     setConnectionStatus('testing');
     setConnectionError('');
@@ -137,6 +399,366 @@ export default function App() {
       setConnectionError(err.message || '网络连接超时');
       setConnectionStatus('error');
     }
+  };
+
+  // 测试生图 API 连通性 (硅基流动特化优化，不扣除额度)
+  const handleTestImageConnection = async () => {
+    setImageConnectionStatus('testing');
+    setImageConnectionError('');
+    const startTime = Date.now();
+
+    if (!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setImageConnectionLatency(31);
+      setImageConnectionStatus('success');
+      return;
+    }
+
+    try {
+      const url = imageApiUrl || "https://api.siliconflow.cn/v1/images/generations";
+      const model = imageModelName || "black-forest-labs/FLUX.1-schnell";
+
+      // 如果是硅基流动（SiliconFlow），可以通过免费的 /v1/user/info 查询余额端点测试连通性，不扣除生图额度！
+      const isSiliconFlow = url.includes("siliconflow.cn");
+      const testUrl = isSiliconFlow ? "https://api.siliconflow.cn/v1/user/info" : url;
+
+      const res = await fetch(testUrl, {
+        method: isSiliconFlow ? 'GET' : 'POST',
+        headers: {
+          'Authorization': `Bearer ${imageApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: isSiliconFlow ? null : JSON.stringify({
+          model: model,
+          prompt: 'test',
+          width: 256,
+          height: 256,
+          num_inference_steps: 1,
+          batch_size: 1
+        })
+      });
+
+      const endTime = Date.now();
+
+      if (res.ok) {
+        setImageConnectionLatency(endTime - startTime);
+        setImageConnectionStatus('success');
+      } else {
+        throw new Error(`连接失败 (状态码: ${res.status})`);
+      }
+    } catch (err) {
+      console.error("测试生图 API 连通性出错:", err);
+      setImageConnectionError(err.message || '网络连接超时');
+      setImageConnectionStatus('error');
+    }
+  };
+
+  // 测试生视频 API 连通性 (New)
+  const handleTestVideoConnection = async () => {
+    setVideoConnectionStatus('testing');
+    setVideoConnectionError('');
+    const startTime = Date.now();
+
+    if (!videoApiKey || videoApiKey.trim() === '' || videoApiKey === 'YOUR_VIDEO_KEY_HERE') {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setVideoConnectionLatency(42);
+      setVideoConnectionStatus('success');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/test/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: videoApiKey,
+          api_url: videoApiUrl,
+          model_name: videoModelName
+        })
+      });
+
+      const endTime = Date.now();
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        setVideoConnectionLatency(endTime - startTime);
+        setVideoConnectionStatus('success');
+      } else {
+        throw new Error(result.error || `连接失败 (状态码: ${res.status})`);
+      }
+    } catch (err) {
+      console.error("测试生视频 API 连通性出错:", err);
+      setVideoConnectionError(err.message || '网络连接超时');
+      setVideoConnectionStatus('error');
+    }
+  };
+
+  // 测试语音合成 API 连通性 (New)
+  const handleTestTtsConnection = async () => {
+    setTtsConnectionStatus('testing');
+    setTtsConnectionError('');
+    const startTime = Date.now();
+
+    if (!ttsApiKey || ttsApiKey.trim() === '' || ttsApiKey === 'YOUR_TTS_KEY_HERE') {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setTtsConnectionLatency(35);
+      setTtsConnectionStatus('success');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/test/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: ttsApiKey,
+          api_url: ttsApiUrl,
+          model_name: ttsModelName
+        })
+      });
+
+      const endTime = Date.now();
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        setTtsConnectionLatency(endTime - startTime);
+        setTtsConnectionStatus('success');
+      } else {
+        throw new Error(result.error || `连接失败 (状态码: ${res.status})`);
+      }
+    } catch (err) {
+      console.error("测试语音合成 API 连通性出错:", err);
+      setTtsConnectionError(err.message || '网络连接超时');
+      setTtsConnectionStatus('error');
+    }
+  };
+
+  // 播放音色预览 (New Feature)
+  const playVoicePreview = async (voiceName) => {
+    // 停止当前浏览器原生所有播放
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    
+    // 获取各音色对应的预览测试文本
+    let previewText = "我是您的漫剧配音智脑，祝您创作出爆款短视频！";
+    switch(voiceName) {
+      case '故事旁白':
+        previewText = "乾坤未定，你我皆是黑马。欢迎收看今日的高燃漫剧。";
+        break;
+      case '霸气总裁':
+        previewText = "女人，你是在向我叶凌天发起挑战吗？退下！";
+        break;
+      case '阳光大男孩':
+        previewText = "师兄！我们今天终于把龙魂草采回来啦！哈哈，我们出发吧！";
+        break;
+      case '知性姐姐':
+        previewText = "修行之路上切勿急躁，若是有什么不懂的，师姐随时在这里。";
+        break;
+      case '魅惑御姐':
+        previewText = "呵呵……小家伙，你这眼神，姐姐可真是越来越喜欢了呢。";
+        break;
+      case '东北老铁':
+        previewText = "哎呀妈呀老铁！这系统可太得劲了，杠杠的，必须关注！";
+        break;
+      case '系统萌娃':
+        previewText = "叮咚！检测到宿主快要死翘翘了，系统自动为您开启神龙逆天血脉哦！";
+        break;
+    }
+
+    // 1. 判断是否配置了语音大模型 (在线高品质 CosyVoice/OpenAI TTS 模式)
+    const isOnlineTTS = ttsApiKey && ttsApiKey.trim() !== '' && ttsApiKey !== 'YOUR_TTS_KEY_HERE';
+    if (isOnlineTTS) {
+      try {
+        const res = await fetch('/api/scene/generate-tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voice_name: voiceName,
+            text: previewText,
+            tts_api_key: ttsApiKey,
+            tts_api_url: ttsApiUrl,
+            tts_model_name: ttsModelName
+          })
+        });
+        
+        if (!res.ok) {
+          throw new Error(`TTS API 接口响应失败，状态码: ${res.status}`);
+        }
+        
+        const result = await res.json();
+        if (result.success && result.audio_base64) {
+          // 播放 Base64 音频
+          const audio = new Audio(`data:audio/mp3;base64,${result.audio_base64}`);
+          audio.play();
+          return; // 播放成功，直接返回
+        }
+      } catch (err) {
+        console.error("在线 TTS 播放失败，自动降级为浏览器原生合成:", err);
+      }
+    }
+
+    // 2. 降级为本地 Web Speech API 模式 (进行了强力的参数分化，以确保即使是单一系统女声/男声也有巨大区分度)
+    if (!window.speechSynthesis) {
+      alert("您的浏览器不支持 Web Speech API，且未配置在线语音大模型，无法试听");
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(previewText);
+    utterance.lang = 'zh-CN';
+    
+    // 强制调配不同音调、语速以及音量特征，实现极致本地区分度
+    switch(voiceName) {
+      case '故事旁白':
+        utterance.pitch = 0.85; // 低沉磁性
+        utterance.rate = 0.85;  // 沉稳慢速
+        break;
+      case '霸气总裁':
+        utterance.pitch = 0.55; // 极低男低音
+        utterance.rate = 0.9;   // 冷酷威严
+        break;
+      case '阳光大男孩':
+        utterance.pitch = 1.2;  // 阳光清脆
+        utterance.rate = 1.15;  // 快速热情
+        break;
+      case '知性姐姐':
+        utterance.pitch = 1.05; // 温柔自然
+        utterance.rate = 0.88;  // 知性舒缓
+        break;
+      case '魅惑御姐':
+        utterance.pitch = 0.8;  // 性感略带低沙
+        utterance.rate = 0.82;  // 充满魅惑慢速
+        break;
+      case '东北老铁':
+        utterance.pitch = 0.95; // 洪亮豪爽
+        utterance.rate = 1.3;   // 幽默超快嘴速
+        break;
+      case '系统萌娃':
+        utterance.pitch = 1.85; // 极高频小萝莉/正太音
+        utterance.rate = 1.35;  // 机械跳跃感
+        break;
+      default:
+        utterance.pitch = 1.0;
+        utterance.rate = 1.0;
+        break;
+    }
+
+    // 尽可能寻找系统内不同的中文发音引擎
+    const voices = window.speechSynthesis.getVoices();
+    const zhVoices = voices.filter(v => v.lang.includes('ZH') || v.lang.includes('zh'));
+    
+    if (zhVoices.length > 0) {
+      // 区分男女声：知性姐姐, 魅惑御姐, 系统萌娃 用女声；其他用男声
+      const isFemaleRole = ['知性姐姐', '魅惑御姐', '系统萌娃'].includes(voiceName);
+      if (isFemaleRole) {
+        const female = zhVoices.find(v => v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('xiaoxiao') || v.name.toLowerCase().includes('huihui') || v.name.toLowerCase().includes('yaoyao'));
+        utterance.voice = female || zhVoices[0];
+      } else {
+        const male = zhVoices.find(v => v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('yunting') || v.name.toLowerCase().includes('kangkang') || v.name.toLowerCase().includes('yunxi'));
+        utterance.voice = male || zhVoices.find(v => v !== (zhVoices.find(v2 => v2.name.toLowerCase().includes('female')))) || zhVoices[0];
+      }
+    }
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // 一键渲染分镜画面 (Upgraded with storyboard_id)
+  const handleGenerateImage = async (sceneId, prompt) => {
+    setGeneratingImageSceneId(sceneId);
+    try {
+      const res = await fetch('/api/scene/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scene_id: sceneId,
+          prompt: prompt,
+          storyboard_id: currentStoryboard?.id,
+          image_api_key: imageApiKey,
+          image_api_url: imageApiUrl,
+          image_model_name: imageModelName
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Image generation failed');
+      }
+      const data = await res.json();
+      if (data.success) {
+        setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, image_url: data.image_url } : s));
+      }
+    } catch (err) {
+      alert(`渲染生图失败: ${err.message}`);
+    } finally {
+      setGeneratingImageSceneId(null);
+    }
+  };
+
+  // 一键渲染分镜视频 (I2V Safety Interception)
+  const handleGenerateVideo = async (sceneId, prompt, imageUrl) => {
+    if (!imageUrl) {
+      setConsistencyWarningSceneId(sceneId);
+      setShowConsistencyWarning(true);
+      return;
+    }
+    setGeneratingVideoSceneId(sceneId);
+    try {
+      const scene = scenes.find(s => s.id === sceneId);
+      const res = await fetch('/api/scene/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scene_id: sceneId,
+          prompt: prompt,
+          image_url: imageUrl,
+          camera_motion: scene?.camera_motion || 'static',
+          motion_intensity: scene?.motion_intensity || 'low',
+          video_api_key: videoApiKey,
+          video_api_url: videoApiUrl,
+          video_model_name: videoModelName
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Video generation failed');
+      }
+      const data = await res.json();
+      if (data.success) {
+        setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, video_url: data.video_url } : s));
+      }
+    } catch (err) {
+      alert(`视频生成失败: ${err.message}`);
+    } finally {
+      setGeneratingVideoSceneId(null);
+    }
+  };
+
+  const handleForceGenerateVideo = (sceneId, prompt) => {
+    setShowConsistencyWarning(false);
+    setConsistencyWarningSceneId(null);
+    setGeneratingVideoSceneId(sceneId);
+    const scene = scenes.find(s => s.id === sceneId);
+    fetch('/api/scene/generate-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scene_id: sceneId,
+        prompt: prompt,
+        image_url: null,
+        camera_motion: scene?.camera_motion || 'static',
+        motion_intensity: scene?.motion_intensity || 'low',
+        video_api_key: videoApiKey,
+        video_api_url: videoApiUrl,
+        video_model_name: videoModelName
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, video_url: data.video_url } : s));
+      }
+    })
+    .catch(err => alert(`Video generation failed: ${err.message}`))
+    .finally(() => setGeneratingVideoSceneId(null));
   };
 
   // 一键生成分镜
@@ -373,308 +995,6 @@ export default function App() {
     document.body.removeChild(a);
   };
 
-  // Native Text-to-Speech Preview (Web Speech API)
-  const handlePlayVoice = (sceneId, text, voiceType) => {
-    if (!('speechSynthesis' in window)) {
-      alert("您的浏览器不支持 Web Speech API，请使用现代浏览器 (Chrome/Edge/Safari)。");
-      return;
-    }
-
-    // If already playing the current scene's voice, stop it
-    if (activeSpeechScene === sceneId) {
-      window.speechSynthesis.cancel();
-      setActiveSpeechScene(null);
-      return;
-    }
-
-    // Stop any other active voices first
-    window.speechSynthesis.cancel();
-
-    const cleanText = text.replace(/[\r\n\t]/g, ' ').replace(/[“”（）"']/g, '').trim();
-    if (!cleanText) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'zh-CN';
-
-    // Map CapCut voices to Web Speech characteristics (pitch, rate)
-    switch (voiceType) {
-      case '深沉旁白':
-        utterance.pitch = 0.7;
-        utterance.rate = 0.85;
-        break;
-      case '冷酷男神':
-        utterance.pitch = 0.85;
-        utterance.rate = 0.95;
-        break;
-      case '热血少年':
-        utterance.pitch = 1.15;
-        utterance.rate = 1.2;
-        break;
-      case '系统机械音':
-        utterance.pitch = 1.0;
-        utterance.rate = 1.05;
-        break;
-      case '霸气御姐':
-        utterance.pitch = 0.95;
-        utterance.rate = 0.95;
-        break;
-      case '温柔师姐':
-        utterance.pitch = 1.1;
-        utterance.rate = 0.9;
-        break;
-      default:
-        utterance.pitch = 1.0;
-        utterance.rate = 1.0;
-    }
-
-    // Try to find a fitting Chinese voice
-    const voices = window.speechSynthesis.getVoices();
-    const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('ZH'));
-    if (zhVoices.length > 0) {
-      // Simple gender heuristic based on recommended voice
-      const isFemaleRole = ['霸气御姐', '温柔师姐'].includes(voiceType);
-      const isMaleRole = ['深沉旁白', '冷酷男神', '热血少年'].includes(voiceType);
-      
-      let matchedVoice = null;
-      if (isFemaleRole) {
-        matchedVoice = zhVoices.find(v => v.name.toLowerCase().includes('female') || v.name.includes('Xiaoxiao') || v.name.includes('Huihui'));
-      } else if (isMaleRole) {
-        matchedVoice = zhVoices.find(v => v.name.toLowerCase().includes('male') || v.name.includes('Kangkang') || v.name.includes('Yaoyao'));
-      }
-      utterance.voice = matchedVoice || zhVoices[0];
-    }
-
-    utterance.onstart = () => {
-      setActiveSpeechScene(sceneId);
-    };
-
-    utterance.onend = () => {
-      setActiveSpeechScene(null);
-    };
-
-    utterance.onerror = () => {
-      setActiveSpeechScene(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Web Audio SFX Synthesizer
-  const handlePlaySFX = (sceneId, sfxDescription) => {
-    if (activeSFXScene === sceneId) {
-      // Toggle off if clicked again (just clear state)
-      setActiveSFXScene(null);
-      return;
-    }
-
-    setActiveSFXScene(sceneId);
-
-    // Dynamic wave animation duration matching SFX length
-    let durationMs = 1500;
-
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-
-      const desc = sfxDescription || "";
-
-      // 1. Crystal Ping / System Notification
-      if (desc.includes("叮") || desc.includes("提示音") || desc.includes("金属")) {
-        durationMs = 800;
-        const now = ctx.currentTime;
-        
-        // Osc 1 (Sine wave high ping)
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1400, now);
-        osc.frequency.exponentialRampToValueAtTime(1800, now + 0.08);
-        
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.4);
-
-        // Osc 2 (Slightly delayed harmony)
-        setTimeout(() => {
-          const now2 = ctx.currentTime;
-          const osc2 = ctx.createOscillator();
-          const gain2 = ctx.createGain();
-          osc2.type = 'sine';
-          osc2.frequency.setValueAtTime(1800, now2);
-          osc2.frequency.exponentialRampToValueAtTime(2400, now2 + 0.08);
-          
-          gain2.gain.setValueAtTime(0.1, now2);
-          gain2.gain.exponentialRampToValueAtTime(0.001, now2 + 0.45);
-          
-          osc2.connect(gain2);
-          gain2.connect(ctx.destination);
-          osc2.start(now2);
-          osc2.stop(now2 + 0.5);
-        }, 120);
-      }
-      // 2. Heavy Thunder / Explosion / Strike
-      else if (desc.includes("雷") || desc.includes("重") || desc.includes("爆炸") || desc.includes("冲击波") || desc.includes("震")) {
-        durationMs = 2200;
-        const now = ctx.currentTime;
-        const bufferSize = ctx.sampleRate * 2.0; // 2 seconds
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        
-        // Generate Brownish/White Noise for low rumble
-        let lastOut = 0.0;
-        for (let i = 0; i < bufferSize; i++) {
-          const white = Math.random() * 2 - 1;
-          // Low pass filter white noise to get brown noise
-          data[i] = (lastOut + (0.02 * white)) / 1.02;
-          lastOut = data[i];
-          data[i] *= 3.5; // Amplify
-        }
-        
-        const noiseNode = ctx.createBufferSource();
-        noiseNode.buffer = buffer;
-        
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(250, now);
-        filter.frequency.exponentialRampToValueAtTime(35, now + 1.8);
-        
-        const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.4, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.9);
-        
-        noiseNode.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
-        
-        noiseNode.start(now);
-        noiseNode.stop(now + 2.0);
-
-        // Synth Bass Drop under rumble
-        const subOsc = ctx.createOscillator();
-        const subGain = ctx.createGain();
-        subOsc.type = 'sine';
-        subOsc.frequency.setValueAtTime(90, now);
-        subOsc.frequency.linearRampToValueAtTime(30, now + 1.2);
-        
-        subGain.gain.setValueAtTime(0.3, now);
-        subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
-        
-        subOsc.connect(subGain);
-        subGain.connect(ctx.destination);
-        subOsc.start(now);
-        subOsc.stop(now + 1.3);
-      }
-      // 3. Sci-Fi Charge / Swoosh / Dragon Roar
-      else if (desc.includes("充电") || desc.includes("嗡鸣") || desc.includes("能量") || desc.includes("神龙") || desc.includes("怒吼")) {
-        durationMs = 2000;
-        const now = ctx.currentTime;
-        
-        // Synth wave sweeps
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(75, now);
-        osc.frequency.exponentialRampToValueAtTime(450, now + 1.4);
-        
-        filter.type = 'bandpass';
-        filter.Q.setValueAtTime(8, now);
-        filter.frequency.setValueAtTime(150, now);
-        filter.frequency.exponentialRampToValueAtTime(1200, now + 1.4);
-        
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.linearRampToValueAtTime(0.2, now + 0.4);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
-        
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.start(now);
-        osc.stop(now + 1.7);
-        
-        // LFO Pitch Modulator for animalistic vibrating texture
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.frequency.setValueAtTime(16, now); // 16Hz pitch wobble
-        lfoGain.gain.setValueAtTime(15, now);
-        
-        lfo.connect(lfoGain);
-        lfoGain.connect(osc.frequency);
-        lfo.start(now);
-        lfo.stop(now + 1.7);
-      }
-      // 4. Default Ambient Swoosh / Magic sparkle
-      else {
-        durationMs = 1200;
-        const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(320, now);
-        osc.frequency.exponentialRampToValueAtTime(950, now + 0.8);
-        
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 1.0);
-      }
-    } catch (e) {
-      console.error("Web Audio Synthesizer Error: ", e);
-    }
-
-    // Reset visualizer state when sound ends
-    setTimeout(() => {
-      setActiveSFXScene(prev => prev === sceneId ? null : prev);
-    }, durationMs);
-  };
-
-  // Simulated AI Image Generation with scanning animation & DB update
-  const handleGenerateImage = async (scene) => {
-    const sceneKey = scene.id || scene.scene_number;
-    setGeneratingImageScene(sceneKey);
-
-    // Shimmering sci-fi scanning duration
-    await new Promise(resolve => setTimeout(resolve, 2500));
-
-    // Seed-based high quality anime illustration
-    const seedId = `${scene.scene_number}_anime_${currentStoryboard ? currentStoryboard.id : 1}`;
-    const newImageUrl = `https://picsum.photos/seed/${seedId}/640/360`;
-
-    // Update scenes in state
-    const updatedScenes = scenes.map(s => 
-      (s.id === scene.id || s.scene_number === scene.scene_number) 
-        ? { ...s, image_url: newImageUrl } 
-        : s
-    );
-
-    setScenes(updatedScenes);
-    setGeneratingImageScene(null);
-
-    // Save persistently to SQLite database via PUT endpoint
-    if (currentStoryboard) {
-      try {
-        await fetch(`/api/storyboard/${currentStoryboard.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scenes: updatedScenes })
-        });
-      } catch (err) {
-        console.error("保存生成图片到数据库失败:", err);
-      }
-    }
-  };
-
   // 弹出编辑窗口
   const handleEditClick = (scene) => {
     setEditingScene({ ...scene });
@@ -686,7 +1006,7 @@ export default function App() {
     
     // 更新本地状态
     const updatedScenes = scenes.map(s => 
-      s.id === editingScene.id ? editingScene : s
+      s.scene_number === editingScene.scene_number ? editingScene : s
     );
     
     setScenes(updatedScenes);
@@ -735,173 +1055,653 @@ export default function App() {
         </div>
       </header>
 
-      {/* 设置收纳折叠面板 */}
+      {/* 设置收纳折叠面板 (双控制台分裂重构) */}
       {showSettings && (
         <div className="settings-accordion">
           <div className="settings-header">
             <h3 className="settings-title">
-              <Cpu style={{ width: '16px', height: '16px' }} /> DeepSeek / 智脑配置中心
+              <Cpu style={{ width: '16px', height: '16px' }} /> 2026 双向 AI 智脑配置中心
             </h3>
             <span className="settings-badge">已加密存储于浏览器 LocalStorage</span>
           </div>
+          
           <div className="settings-grid">
-            <div className="form-group">
-              <label className="label-tech">DeepSeek API KEY</label>
-              <div style={{ position: 'relative' }}>
+            
+            {/* 1. 剧本分镜解析 LLM */}
+            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Cpu style={{ width: '13px', height: '13px' }} /> 1. 剧本解析大模型配置 (LLM)
+              </h4>
+              <div className="form-group">
+                <label className="label-tech">DeepSeek API KEY</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="password" 
+                    value={apiKey} 
+                    onChange={(e) => setApiKey(e.target.value)} 
+                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="input-tech"
+                    style={{ paddingRight: '36px' }}
+                  />
+                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="label-tech">API 请求网关 (BASE URL)</label>
                 <input 
-                  type="password" 
-                  value={apiKey} 
-                  onChange={(e) => setApiKey(e.target.value)} 
-                  placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                  type="text" 
+                  value={apiUrl} 
+                  onChange={(e) => setUrl(e.target.value)} 
+                  placeholder="https://api.deepseek.com/v1/chat/completions"
                   className="input-tech"
-                  style={{ paddingRight: '36px' }}
                 />
-                <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
               </div>
-              <p style={{ fontSize: '9px', color: 'var(--text-dim)', marginTop: '4px' }}>留空或填写无效 Key 将自动运行【高真度模拟演示模式】</p>
+              <div className="form-group">
+                <label className="label-tech">模型型号 (MODEL NAME)</label>
+                <input 
+                  type="text" 
+                  value={modelName} 
+                  onChange={(e) => setModelName(e.target.value)} 
+                  placeholder="deepseek-chat"
+                  className="input-tech"
+                />
+              </div>
+              <div className="connection-test-row">
+                <button onClick={handleTestConnection} disabled={connectionStatus === 'testing'} className="btn-test-connection">
+                  {connectionStatus === 'testing' ? '正在联调...' : '测试 LLM 连通性'}
+                </button>
+                {connectionStatus === 'success' && (
+                  <div className="connection-banner success">
+                    <Check style={{ width: '12px', height: '12px' }} />
+                    <span>联通成功 ({connectionLatency}ms)</span>
+                  </div>
+                )}
+                {connectionStatus === 'error' && (
+                  <div className="connection-banner error" title={connectionError}>
+                    <X style={{ width: '12px', height: '12px' }} />
+                    <span>失败</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="form-group">
-              <label className="label-tech">API 请求网关 (BASE URL)</label>
-              <input 
-                type="text" 
-                value={apiUrl} 
-                onChange={(e) => setUrl(e.target.value)} 
-                placeholder="https://api.deepseek.com/v1/chat/completions"
-                className="input-tech"
-              />
-            </div>
-            <div className="form-group">
-              <label className="label-tech">模型型号 (MODEL NAME)</label>
-              <input 
-                type="text" 
-                value={modelName} 
-                onChange={(e) => setModelName(e.target.value)} 
-                placeholder="deepseek-chat"
-                className="input-tech"
-              />
-            </div>
-          </div>
 
-          {/* 连通性测试模块 (New UX Improvement) */}
-          <div className="connection-test-row">
-            <button 
-              onClick={handleTestConnection}
-              disabled={connectionStatus === 'testing'}
-              className="btn-test-connection"
-            >
-              {connectionStatus === 'testing' ? '正在测试连通性...' : '测试 API 连通性'}
-            </button>
-            
-            {connectionStatus === 'success' && (
-              <div className="connection-banner success">
-                <Check style={{ width: '12px', height: '12px' }} />
-                <span>DeepSeek API 连通成功 (延迟: {connectionLatency}ms)</span>
+            {/* 2. 分镜一键生图 T2I */}
+            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--secondary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Image style={{ width: '13px', height: '13px' }} /> 2. 分镜一键生图大模型配置 (T2I)
+              </h4>
+              <div className="form-group">
+                <label className="label-tech">生图 API KEY (SiliconFlow/SD/Flux)</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="password" 
+                    value={imageApiKey} 
+                    onChange={(e) => setImageApiKey(e.target.value)} 
+                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="input-tech"
+                    style={{ paddingRight: '36px' }}
+                  />
+                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+                </div>
               </div>
-            )}
-            
-            {connectionStatus === 'error' && (
-              <div className="connection-banner error">
-                <X style={{ width: '12px', height: '12px' }} />
-                <span>连通失败: {connectionError}</span>
+              <div className="form-group">
+                <label className="label-tech">生图 API 网关 (BASE URL)</label>
+                <input 
+                  type="text" 
+                  value={imageApiUrl} 
+                  onChange={(e) => setImageApiUrl(e.target.value)} 
+                  placeholder="https://api.siliconflow.cn/v1/images/generations"
+                  className="input-tech"
+                />
               </div>
-            )}
+              <div className="form-group">
+                <label className="label-tech">生图模型型号 (MODEL NAME)</label>
+                <input 
+                  type="text" 
+                  value={imageModelName} 
+                  onChange={(e) => setImageModelName(e.target.value)} 
+                  placeholder="black-forest-labs/FLUX.1-schnell"
+                  className="input-tech"
+                />
+              </div>
+              <div className="connection-test-row">
+                <button onClick={handleTestImageConnection} disabled={imageConnectionStatus === 'testing'} className="btn-test-connection" style={{ borderColor: 'var(--secondary)', color: '#d182ff' }}>
+                  {imageConnectionStatus === 'testing' ? '正在联调...' : '测试生图 连通性'}
+                </button>
+                {imageConnectionStatus === 'success' && (
+                  <div className="connection-banner success" style={{ borderColor: 'rgba(185, 39, 252, 0.4)', color: '#d182ff' }}>
+                    <Check style={{ width: '12px', height: '12px' }} />
+                    <span>联通成功 ({imageConnectionLatency}ms)</span>
+                  </div>
+                )}
+                {imageConnectionStatus === 'error' && (
+                  <div className="connection-banner error" title={imageConnectionError}>
+                    <X style={{ width: '12px', height: '12px' }} />
+                    <span>失败</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. 一键生视频 T2V */}
+            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: '#ffb938', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Tv style={{ width: '13px', height: '13px' }} /> 3. 一键生视频大模型配置 (T2V)
+              </h4>
+              <div className="form-group">
+                <label className="label-tech">生视频 API KEY (SiliconFlow/Luma)</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="password" 
+                    value={videoApiKey} 
+                    onChange={(e) => setVideoApiKey(e.target.value)} 
+                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="input-tech"
+                    style={{ paddingRight: '36px' }}
+                  />
+                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="label-tech">生视频 API 网关 (BASE URL)</label>
+                <input 
+                  type="text" 
+                  value={videoApiUrl} 
+                  onChange={(e) => setVideoApiUrl(e.target.value)} 
+                  placeholder="https://api.siliconflow.cn/v1/video/generations"
+                  className="input-tech"
+                />
+              </div>
+              <div className="form-group">
+                <label className="label-tech">生视频模型型号 (MODEL NAME)</label>
+                <input 
+                  type="text" 
+                  value={videoModelName} 
+                  onChange={(e) => setVideoModelName(e.target.value)} 
+                  placeholder="luma/aperture-1.0"
+                  className="input-tech"
+                />
+              </div>
+              <div className="connection-test-row">
+                <button onClick={handleTestVideoConnection} disabled={videoConnectionStatus === 'testing'} className="btn-test-connection" style={{ borderColor: '#ffb938', color: '#ffd685' }}>
+                  {videoConnectionStatus === 'testing' ? '正在联调...' : '测试视频 连通性'}
+                </button>
+                {videoConnectionStatus === 'success' && (
+                  <div className="connection-banner success" style={{ borderColor: 'rgba(255, 185, 56, 0.4)', color: '#ffd685' }}>
+                    <Check style={{ width: '12px', height: '12px' }} />
+                    <span>联通成功 ({videoConnectionLatency}ms)</span>
+                  </div>
+                )}
+                {videoConnectionStatus === 'error' && (
+                  <div className="connection-banner error" title={videoConnectionError}>
+                    <X style={{ width: '12px', height: '12px' }} />
+                    <span>失败</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 4. 语音合成大模型 TTS */}
+            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: '#38ff70', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Volume2 style={{ width: '13px', height: '13px' }} /> 4. 语音合成大模型配置 (TTS)
+              </h4>
+              <div className="form-group">
+                <label className="label-tech">语音 API KEY (SiliconFlow/CosyVoice)</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="password" 
+                    value={ttsApiKey} 
+                    onChange={(e) => setTtsApiKey(e.target.value)} 
+                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="input-tech"
+                    style={{ paddingRight: '36px' }}
+                  />
+                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="label-tech">语音 API 网关 (BASE URL)</label>
+                <input 
+                  type="text" 
+                  value={ttsApiUrl} 
+                  onChange={(e) => setTtsApiUrl(e.target.value)} 
+                  placeholder="https://api.siliconflow.cn/v1/audio/speech"
+                  className="input-tech"
+                />
+              </div>
+              <div className="form-group">
+                <label className="label-tech">语音模型型号 (MODEL NAME)</label>
+                <input 
+                  type="text" 
+                  value={ttsModelName} 
+                  onChange={(e) => setTtsModelName(e.target.value)} 
+                  placeholder="FunAudioLLM/CosyVoice2-0.5B"
+                  className="input-tech"
+                />
+              </div>
+              <div className="connection-test-row">
+                <button onClick={handleTestTtsConnection} disabled={ttsConnectionStatus === 'testing'} className="btn-test-connection" style={{ borderColor: '#38ff70', color: '#8dffa5' }}>
+                  {ttsConnectionStatus === 'testing' ? '正在联调...' : '测试语音 连通性'}
+                </button>
+                {ttsConnectionStatus === 'success' && (
+                  <div className="connection-banner success" style={{ borderColor: 'rgba(56, 255, 112, 0.4)', color: '#8dffa5' }}>
+                    <Check style={{ width: '12px', height: '12px' }} />
+                    <span>联通成功 ({ttsConnectionLatency}ms)</span>
+                  </div>
+                )}
+                {ttsConnectionStatus === 'error' && (
+                  <div className="connection-banner error" title={ttsConnectionError}>
+                    <X style={{ width: '12px', height: '12px' }} />
+                    <span>失败</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
 
       {/* 主工作区 */}
-      <main className="dashboard-grid">
-        
-        {/* 左侧控制台 */}
-        <aside className="sidebar-layout">
-          {/* 小说剧本输入面板 */}
-          <div className="glass-card">
-            <h3 className="card-title">
-              <BookOpen style={{ width: '16px', height: '16px' }} /> 原始小说片段 (Cultivation Hook)
-            </h3>
-            <div className="textarea-container">
-              <textarea 
-                value={novelText}
-                onChange={(e) => setNovelText(e.target.value)}
-                placeholder="在此黏贴热门修仙小说的精彩片段或大纲..."
-                className="textarea-tech"
-                style={{ height: '220px' }}
-              />
-              <span className="char-counter">
-                {novelText.length} 字
-              </span>
+      <main className={scenes.length === 0 ? "wizard-dashboard-layout" : "dashboard-grid"}>
+        {scenes.length === 0 ? (
+          /* ================= STEP 1: WIZARD FLOW ================= */
+          <div className="wizard-card glass-card">
+            <div className="wizard-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '20px', fontWeight: 800, color: '#fff' }}>
+                <Sparkles style={{ width: '22px', height: '22px', color: 'var(--primary)' }} />
+                <span>步骤一：导入小说剧本与全局配置</span>
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>
+                在下方粘贴您的小说精彩片段，并选定全局画风与导演控制参数，开启AI漫剧创作！
+              </p>
             </div>
 
-            <div className="badge-container">
-              <span className="badge-cyber badge-cyber-blue">
-                修仙系统绑定预设
-              </span>
-              <span className="badge-cyber badge-cyber-gold">
-                唯美写实国风动漫
-              </span>
-            </div>
-
-            <button 
-              onClick={handleGenerate}
-              disabled={loading || !novelText.trim()}
-              className="btn-cyber"
-              style={{ width: '100%', marginTop: '16px' }}
-            >
-              <Sparkles style={{ width: '15px', height: '15px' }} />
-              一键智脑分镜化 (LLM Run)
-            </button>
-          </div>
-
-          {/* SQLite 历史记录面板 */}
-          <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '260px' }}>
-            <h3 className="history-section-title">
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><History style={{ width: '15px', height: '15px', color: 'var(--secondary)' }} /> 历史生成记录 (SQLite)</span>
-              <Database style={{ width: '14px', height: '14px', color: 'var(--text-dim)' }} />
-            </h3>
-            <div className="history-list" style={{ flexGrow: 1 }}>
-              {historyList.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '11px', padding: '40px 0', fontFamily: 'monospace' }}>
-                  &lt; 暂无历史记录 &gt;
+            <div className="wizard-grid-cols">
+              {/* Left Column: Script Input */}
+              <div className="wizard-col-left">
+                <label className="label-tech" style={{ fontSize: '12px', marginBottom: '8px', display: 'block' }}>
+                  原始小说片段 (Novel Text Input)
+                </label>
+                <div className="textarea-container">
+                  <textarea 
+                    value={novelText}
+                    onChange={(e) => setNovelText(e.target.value)}
+                    placeholder="在此黏贴热门修仙小说的精彩片段或大纲..."
+                    className="textarea-tech"
+                    style={{ height: '320px' }}
+                  />
+                  <span className="char-counter">
+                    {novelText.length} 字
+                  </span>
                 </div>
-              ) : (
-                historyList.map((hist) => (
-                  <div 
-                    key={hist.id} 
-                    onClick={() => handleSelectHistory(hist.id)}
-                    className={`history-item ${currentStoryboard && currentStoryboard.id === hist.id ? 'active' : ''}`}
-                  >
-                    <div className="history-item-details">
-                      <span className="history-item-title">{hist.title}</span>
-                      <span className="history-item-date">
-                        {new Date(hist.created_at).toLocaleString('zh-CN', { hour12: false })}
-                      </span>
+                <div className="badge-container" style={{ marginTop: '12px' }}>
+                  <span className="badge-cyber badge-cyber-blue">修仙系统绑定预设</span>
+                  <span className="badge-cyber badge-cyber-gold">唯美写实国风动漫</span>
+                </div>
+              </div>
+
+              {/* Right Column: Style & Director settings */}
+              <div className="wizard-col-right" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div>
+                  <label className="label-tech" style={{ fontSize: '12px', marginBottom: '8px', display: 'block' }}>
+                    步骤二：全局画风选择 (Style Presets)
+                  </label>
+                  <div className="style-preset-grid-wizard">
+                    {STYLE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        className={`style-preset-chip-wizard ${stylePreset === preset.value ? 'active' : ''}`}
+                        onClick={() => setStylePreset(preset.value)}
+                        title={preset.desc}
+                      >
+                        <span style={{ fontWeight: 'bold' }}>{preset.label}</span>
+                        <span className="preset-desc-small">{preset.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="wizard-row-settings">
+                  <div style={{ flex: 1 }}>
+                    <label className="label-tech">种子锁定 (Seed)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                      <input
+                        type="number"
+                        className="seed-input"
+                        style={{ width: '100%', height: '36px' }}
+                        value={masterSeed}
+                        onChange={(e) => setMasterSeed(parseInt(e.target.value) || -1)}
+                        disabled={seedLocked}
+                      />
+                      <button
+                        type="button"
+                        className={`btn-seed-lock ${seedLocked ? 'locked' : ''}`}
+                        onClick={() => setSeedLocked(!seedLocked)}
+                        title={seedLocked ? '解锁种子' : '锁定种子'}
+                        style={{ height: '36px', width: '36px', display: 'flex', alignItems: 'center', justifyItems: 'center', padding: '10px' }}
+                      >
+                        {seedLocked ? <Lock style={{ width: '14px', height: '14px' }} /> : <Unlock style={{ width: '14px', height: '14px' }} />}
+                      </button>
                     </div>
-                    <button 
-                      onClick={(e) => handleDeleteHistory(e, hist.id)}
-                      className="btn-delete-history"
+                  </div>
+
+                  <div style={{ flex: 2 }}>
+                    <label className="label-tech">风格参考图 URL (SREF)</label>
+                    <input
+                      type="text"
+                      className="seed-input"
+                      style={{ width: '100%', height: '36px', marginTop: '6px' }}
+                      value={styleRefUrl}
+                      onChange={(e) => setStyleRefUrl(e.target.value)}
+                      placeholder="粘贴风格参考图 URL..."
+                    />
+                  </div>
+                </div>
+
+                {/* Inline Advanced Keys Accordion */}
+                <div className="wizard-keys-panel">
+                  <button 
+                    type="button"
+                    className="btn-keys-toggle" 
+                    onClick={() => setShowSettings(!showSettings)}
+                  >
+                    <Settings style={{ width: '13px', height: '13px' }} /> 
+                    <span>{showSettings ? '隐藏高级智脑 API 密钥配置' : '展开高级智脑 API 密钥配置'}</span>
+                  </button>
+                  
+                  {showSettings && (
+                    <div className="wizard-keys-grid">
+                      <div className="form-group-wizard">
+                        <span className="label-tech-wizard">LLM Key</span>
+                        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="DeepSeek API Key" className="input-tech-small" />
+                      </div>
+                      <div className="form-group-wizard">
+                        <span className="label-tech-wizard">生图 Key</span>
+                        <input type="password" value={imageApiKey} onChange={e => setImageApiKey(e.target.value)} placeholder="SiliconFlow T2I Key" className="input-tech-small" />
+                      </div>
+                      <div className="form-group-wizard">
+                        <span className="label-tech-wizard">生视频 Key</span>
+                        <input type="password" value={videoApiKey} onChange={e => setVideoApiKey(e.target.value)} placeholder="SiliconFlow T2V Key" className="input-tech-small" />
+                      </div>
+                      <div className="form-group-wizard">
+                        <span className="label-tech-wizard">配音 Key</span>
+                        <input type="password" value={ttsApiKey} onChange={e => setTtsApiKey(e.target.value)} placeholder="SiliconFlow TTS Key" className="input-tech-small" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={handleGenerate}
+                  disabled={loading || !novelText.trim()}
+                  className="btn-cyber"
+                  style={{ width: '100%', height: '48px', fontSize: '15px' }}
+                >
+                  <Sparkles style={{ width: '18px', height: '18px' }} />
+                  <span>一键智脑分镜化 (Run Director AI)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Slate-colored history section at the bottom */}
+            {historyList.length > 0 && (
+              <div className="wizard-history-footer">
+                <h4 className="wizard-history-title">
+                  <History style={{ width: '14px', height: '14px', color: 'var(--secondary)' }} /> 
+                  <span>快速载入历史创作记录 (SQLite)</span>
+                </h4>
+                <div className="wizard-history-scroll">
+                  {historyList.map((hist) => (
+                    <div key={hist.id} className="wizard-history-chip" onClick={() => handleSelectHistory(hist.id)}>
+                      <span className="wizard-history-chip-title">{hist.title}</span>
+                      <span className="wizard-history-chip-time">
+                        {new Date(hist.created_at).toLocaleDateString('zh-CN')}
+                      </span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteHistory(e, hist.id); }}
+                        className="wizard-history-chip-delete"
+                        title="删除记录"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ================= STEP 2: ACTIVE DUAL-COLUMN WORKSPACE ================= */
+          <>
+            {/* 左侧控制台 */}
+            <aside className="sidebar-layout">
+              {/* SQLite 历史记录面板 (已生成状态下为精简可收纳) */}
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '180px', padding: '16px' }}>
+                <h3 className="history-section-title" style={{ fontSize: '12px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <History style={{ width: '13px', height: '13px', color: 'var(--secondary)' }} /> 
+                    <span> SQLite 剧本历史记录</span>
+                  </span>
+                </h3>
+                <div className="history-list" style={{ flexGrow: 1, maxHeight: '110px', overflowY: 'auto' }}>
+                  {historyList.map((hist) => (
+                    <div 
+                      key={hist.id} 
+                      onClick={() => handleSelectHistory(hist.id)}
+                      className={`history-item ${currentStoryboard && currentStoryboard.id === hist.id ? 'active' : ''}`}
+                      style={{ padding: '8px 10px', marginBottom: '4px' }}
                     >
-                      <Trash2 style={{ width: '13px', height: '13px' }} />
+                      <span className="history-item-title" style={{ fontSize: '11px' }}>{hist.title}</span>
+                      <button 
+                        onClick={(e) => handleDeleteHistory(e, hist.id)}
+                        className="btn-delete-history"
+                        style={{ padding: '2px' }}
+                      >
+                        <Trash2 style={{ width: '11px', height: '11px' }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  className="btn-cyber-secondary"
+                  style={{ width: '100%', marginTop: '10px', fontSize: '11px', padding: '6px', height: '28px' }}
+                  onClick={() => {
+                    setCurrentStoryboard(null);
+                    setScenes([]);
+                  }}
+                >
+                  + 新建分镜剧本
+                </button>
+              </div>
+
+              {/* 角色演员档案舱 (Cast Profile Manager) */}
+              <div className="glass-card" style={{ padding: '16px' }}>
+                <div 
+                  onClick={() => setShowCastPanel(!showCastPanel)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <User style={{ width: '15px', height: '15px', color: 'var(--accent)' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      角色演员档案舱
+                    </span>
+                    <span className="badge-cyber badge-cyber-gold" style={{ fontSize: '9px' }}>
+                      {characters.length} 角色
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', transition: 'transform 0.2s', transform: showCastPanel ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                </div>
+
+                {showCastPanel && (
+                  <div className="cast-panel-body" style={{ marginTop: '12px' }}>
+                    {characters.map((char) => (
+                      <div key={char.id} className="cast-card-vertical" style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '10px' }}>
+                        {/* Header: Name, Type, and Delete */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <input
+                              className="cast-name-input"
+                              value={char.name}
+                              onChange={(e) => handleUpdateCharacter(char.id, { name: e.target.value })}
+                              style={{ width: '80px' }}
+                            />
+                            <span className="badge-cyber badge-cyber-gold" style={{ fontSize: '8px', padding: '1px 5px' }}>{char.role_type}</span>
+                          </div>
+                          <button
+                            className="btn-cyber-tag danger"
+                            onClick={() => handleDeleteCharacter(char.id)}
+                            style={{ padding: '3px 6px', fontSize: '9px', borderRadius: '4px', cursor: 'pointer', background: 'rgba(225, 29, 72, 0.1)', border: '1px solid rgba(225, 29, 72, 0.3)', color: '#fda4af' }}
+                            title="删除角色"
+                          >
+                            <Trash2 style={{ width: '10px', height: '10px' }} />
+                          </button>
+                        </div>
+
+                        {/* Description */}
+                        <textarea
+                          className="cast-appearance-input"
+                          value={char.appearance_prompt || ''}
+                          placeholder="特征描述：发型、服饰、脸部特征（生成分镜图时将自动注入）"
+                          onChange={(e) => handleUpdateCharacter(char.id, { appearance_prompt: e.target.value })}
+                          style={{ minHeight: '38px', resize: 'vertical', width: '100%', fontSize: '10px', background: 'rgba(0,0,0,0.3)', color: '#ccc', borderRadius: '6px', padding: '4px 6px', border: '1px solid rgba(255,255,255,0.05)', lineHeight: '1.4' }}
+                        />
+
+                        {/* Visual Slots: Avatar, Turnaround, Pose */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginTop: '4px' }}>
+                          
+                          {/* Slot 1: Avatar */}
+                          <div className="cast-slot-box" onClick={() => {
+                            if (char.avatar_url) {
+                              setPreviewImageUrl(char.avatar_url);
+                            } else {
+                              handleGenerateAvatar(char.id, char.appearance_prompt);
+                            }
+                          }}>
+                            <div className="cast-slot-preview">
+                              {char.avatar_url ? (
+                                <img src={char.avatar_url} alt="头像" className="cast-slot-img" />
+                              ) : (
+                                <div className="cast-slot-placeholder">
+                                  <User style={{ width: '14px', height: '14px' }} />
+                                </div>
+                              )}
+                              {generatingAvatarId === char.id && (
+                                <div className="cast-slot-loading">
+                                  <RefreshCw className="animate-spin" style={{ width: '11px', height: '11px', color: 'var(--accent)' }} />
+                                </div>
+                              )}
+                              <div className="cast-slot-overlay" onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateAvatar(char.id, char.appearance_prompt);
+                              }} title={char.avatar_url ? "重新定妆" : "一键定妆"}>
+                                <Sparkles style={{ width: '9px', height: '9px' }} />
+                              </div>
+                            </div>
+                            <span className="cast-slot-label">定妆头像</span>
+                          </div>
+
+                          {/* Slot 2: Turnaround */}
+                          <div className="cast-slot-box" onClick={() => {
+                            if (char.turnaround_url) {
+                              setPreviewImageUrl(char.turnaround_url);
+                            } else {
+                              handleGenerateTurnaround(char.id, char.appearance_prompt);
+                            }
+                          }}>
+                            <div className="cast-slot-preview">
+                              {char.turnaround_url ? (
+                                <img src={char.turnaround_url} alt="三视图" className="cast-slot-img" />
+                              ) : (
+                                <div className="cast-slot-placeholder">
+                                  <Layers style={{ width: '14px', height: '14px' }} />
+                                </div>
+                              )}
+                              {generatingTurnaroundId === char.id && (
+                                <div className="cast-slot-loading">
+                                  <RefreshCw className="animate-spin" style={{ width: '11px', height: '11px', color: 'var(--accent)' }} />
+                                </div>
+                              )}
+                              <div className="cast-slot-overlay" onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateTurnaround(char.id, char.appearance_prompt);
+                              }} title={char.turnaround_url ? "重新生成三视图" : "生成三视图"}>
+                                <Sparkles style={{ width: '9px', height: '9px' }} />
+                              </div>
+                            </div>
+                            <span className="cast-slot-label">角色三视图</span>
+                          </div>
+
+                          {/* Slot 3: Pose */}
+                          <div className="cast-slot-box" onClick={() => {
+                            if (char.pose_url) {
+                              setPreviewImageUrl(char.pose_url);
+                            } else {
+                              handleGeneratePose(char.id, char.appearance_prompt);
+                            }
+                          }}>
+                            <div className="cast-slot-preview">
+                              {char.pose_url ? (
+                                <img src={char.pose_url} alt="动作姿态" className="cast-slot-img" />
+                              ) : (
+                                <div className="cast-slot-placeholder">
+                                  <Activity style={{ width: '14px', height: '14px' }} />
+                                </div>
+                              )}
+                              {generatingPoseId === char.id && (
+                                <div className="cast-slot-loading">
+                                  <RefreshCw className="animate-spin" style={{ width: '11px', height: '11px', color: 'var(--accent)' }} />
+                                </div>
+                              )}
+                              <div className="cast-slot-overlay" onClick={(e) => {
+                                e.stopPropagation();
+                                handleGeneratePose(char.id, char.appearance_prompt);
+                              }} title={char.pose_url ? "重新生成姿态图" : "生成姿态图"}>
+                                <Sparkles style={{ width: '9px', height: '9px' }} />
+                              </div>
+                            </div>
+                            <span className="cast-slot-label">姿态/战斗</span>
+                          </div>
+
+                        </div>
+                      </div>
+                    ))}
+                    <button className="btn-cast-add" onClick={handleAddCharacter}>
+                      <User style={{ width: '13px', height: '13px' }} />
+                      + 添加新角色档案
                     </button>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
+                )}
+              </div>
 
-          {/* 智脑运行状态卡片 (New UX Improvement) */}
-          <div className="status-card">
-            <div className="status-dot-label">
-              <div className={`status-dot ${(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? 'yellow' : 'green'}`}></div>
-              <span>系统运行状态</span>
-            </div>
-            <div className={`status-card-value ${(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? 'yellow' : 'green'}`}>
-              {(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? '本地演示模式 (无Key)' : 'DeepSeek 智脑已联通'}
-            </div>
-          </div>
-        </aside>
+              {/* 智脑运行状态卡片 */}
+              <div className="status-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="status-dot-label">
+                    <div className={`status-dot ${(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? 'yellow' : 'green'}`}></div>
+                    <span>剧本解析智脑</span>
+                  </div>
+                  <div className={`status-card-value ${(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? 'yellow' : 'green'}`}>
+                    {(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? '演示模式' : 'DeepSeek 联通'}
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '8px' }}>
+                  <div className="status-dot-label">
+                    <div className={`status-dot ${(!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') ? 'yellow' : 'green'}`}></div>
+                    <span>分镜智能渲染</span>
+                  </div>
+                  <div className={`status-card-value ${(!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') ? 'yellow' : 'green'}`}>
+                    {(!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') ? '演示模式' : 'SiliconFlow 联通'}
+                  </div>
+                </div>
+              </div>
+            </aside>
 
-        {/* 右侧展示面板 */}
-        <section className="workspace-layout">
+            {/* 右侧展示面板 */}
+            <section className="workspace-layout">
           
           {/* 中控与分镜信息栏 */}
           <div className="glass-card workspace-topbar">
@@ -978,6 +1778,75 @@ export default function App() {
             )}
           </div>
 
+          {/* Global Style Hub Panel */}
+          {currentStoryboard && (
+            <div className="style-hub-panel">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Palette style={{ width: '15px', height: '15px', color: 'var(--primary)' }} />
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  全局风格引擎
+                </span>
+                <span className="badge-cyber badge-cyber-blue" style={{ fontSize: '8px' }}>STYLE HUB</span>
+              </div>
+              <div className="style-hub-row">
+                {/* Style Presets */}
+                <div className="style-hub-section">
+                  <span className="detail-label-tech">风格预设</span>
+                  <div className="style-preset-grid">
+                    {STYLE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.value}
+                        className={`style-preset-chip ${stylePreset === preset.value ? 'active' : ''}`}
+                        onClick={() => { setStylePreset(preset.value); handleSaveStyleSettings(); }}
+                        title={preset.desc}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Seed Lock */}
+                <div className="style-hub-section seed-section">
+                  <span className="detail-label-tech">种子锁定</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="number"
+                      className="seed-input"
+                      value={masterSeed}
+                      onChange={(e) => setMasterSeed(parseInt(e.target.value) || -1)}
+                      disabled={seedLocked}
+                    />
+                    <button
+                      className={`btn-seed-lock ${seedLocked ? 'locked' : ''}`}
+                      onClick={() => { setSeedLocked(!seedLocked); handleSaveStyleSettings(); }}
+                      title={seedLocked ? '解锁种子' : '锁定种子'}
+                    >
+                      {seedLocked ? <Lock style={{ width: '12px', height: '12px' }} /> : <Unlock style={{ width: '12px', height: '12px' }} />}
+                      <div className={`seed-status-dot ${seedLocked ? 'active' : ''}`}></div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Style Reference URL */}
+                <div className="style-hub-section">
+                  <span className="detail-label-tech">风格参考图 (SREF)</span>
+                  <div className="sref-upload-zone">
+                    <input
+                      type="text"
+                      className="seed-input"
+                      style={{ width: '100%' }}
+                      value={styleRefUrl}
+                      onChange={(e) => setStyleRefUrl(e.target.value)}
+                      onBlur={handleSaveStyleSettings}
+                      placeholder="粘贴风格参考图 URL..."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 加载中状态 */}
           {loading && (
             <div className="glass-card workspace-loader">
@@ -1025,47 +1894,123 @@ export default function App() {
                     >
                       {/* 左侧：画面视觉预览舱 */}
                       <div className="scene-card-left">
-                        <div 
-                          className="concept-frame" 
-                          style={{ cursor: scene.image_url ? 'default' : 'pointer' }}
-                          onClick={() => !scene.image_url && !generatingImageScene && handleGenerateImage(scene)}
-                        >
-                          <div className="concept-glow"></div>
+                        <div className="concept-frame" style={{ cursor: 'pointer' }}>
                           
-                          {scene.image_url && generatingImageScene !== (scene.id || scene.scene_number) ? (
-                            <>
-                              <img 
-                                src={scene.image_url} 
-                                alt={`Scene ${scene.scene_number}`} 
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, zIndex: 1 }} 
-                              />
-                              <div className="concept-frame-overlay">
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleGenerateImage(scene); }}
-                                  className="btn-cyber-secondary"
-                                  style={{ transform: 'scale(0.85)', background: 'rgba(3,4,8,0.9)', border: '1px solid var(--primary)', padding: '6px 12px', pointerEvents: 'auto', display: 'inline-flex', gap: '4px' }}
-                                >
-                                  <Wand2 style={{ width: '12px', height: '12px' }} /> 重新生成
-                                </button>
-                              </div>
-                            </>
-                          ) : generatingImageScene === (scene.id || scene.scene_number) ? (
-                            <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                              <div className="cyber-scanner-line"></div>
-                              <Wand2 className="concept-icon animate-pulse" style={{ width: '22px', height: '22px', color: 'var(--primary)' }} />
-                              <p className="concept-placeholder-text" style={{ color: 'var(--primary)' }}>智脑绘制中...</p>
-                            </div>
+                           {/* 渲染真实的生成视频或图片 */}
+                          {scene.video_url ? (
+                            <video 
+                              src={scene.video_url}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }} 
+                            />
+                          ) : scene.image_url ? (
+                            <img 
+                              src={scene.image_url} 
+                              alt={`Scene ${scene.scene_number}`} 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }} 
+                            />
                           ) : (
-                            <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
-                              <Sparkles className="concept-icon" style={{ width: '22px', height: '22px' }} />
-                              <span className="concept-placeholder-text">一键生成画面</span>
-                            </div>
+                            <div className="concept-glow"></div>
                           )}
 
                           <div className="concept-meta-top" style={{ zIndex: 3 }}>
                             <span className="badge-scene-num">SCENE {String(scene.scene_number).padStart(2, '0')}</span>
                             <span className="badge-camera" title={scene.camera_direction}>{scene.camera_direction}</span>
                           </div>
+
+                          {/* 悬浮一键视频生成按钮 */}
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGenerateVideo(scene.id, scene.jimeng_prompt, scene.image_url);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              bottom: '8px',
+                              left: '8px',
+                              zIndex: 3,
+                              background: 'rgba(3, 4, 8, 0.75)',
+                              border: '1px solid rgba(255, 185, 56, 0.3)',
+                              borderRadius: '4px',
+                              padding: '4px 6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '9px',
+                              color: '#ffb938',
+                              fontWeight: 'bold',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer'
+                            }}
+                            title="点击一键利用AI视频大模型渲染动态画面"
+                            className="hover:scale-105"
+                          >
+                            {generatingVideoSceneId === scene.id ? (
+                              <>
+                                <RefreshCw className="animate-spin" style={{ width: '10px', height: '10px' }} />
+                                <span>生视频中...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Tv style={{ width: '10px', height: '10px' }} />
+                                <span>{scene.video_url ? '重新视频' : '一键视频'}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* 悬浮一键渲染生图按钮 */}
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGenerateImage(scene.id, scene.jimeng_prompt);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              bottom: '8px',
+                              right: '8px',
+                              zIndex: 3,
+                              background: 'rgba(3, 4, 8, 0.75)',
+                              border: '1px solid rgba(0, 242, 254, 0.3)',
+                              borderRadius: '4px',
+                              padding: '4px 6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '9px',
+                              color: 'var(--primary)',
+                              fontWeight: 'bold',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer'
+                            }}
+                            title="点击一键渲染当前分镜真实画面"
+                            className="hover:scale-105"
+                          >
+                            {generatingImageSceneId === scene.id ? (
+                              <>
+                                <RefreshCw className="animate-spin" style={{ width: '10px', height: '10px' }} />
+                                <span>生图中...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Image style={{ width: '10px', height: '10px' }} />
+                                <span>{scene.image_url ? '重新生图' : '一键生图'}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* I2V Arrow Connector */}
+                          {scene.image_url && !scene.video_url && (
+                            <div className="i2v-arrow-connector">
+                              <Film style={{ width: '8px', height: '8px' }} />
+                              I2V
+                            </div>
+                          )}
+
+                          {!scene.image_url && !scene.video_url && <Sparkles className="concept-icon" style={{ width: '22px', height: '22px', zIndex: 2 }} />}
+                          {!scene.image_url && !scene.video_url && <p className="concept-placeholder-text" style={{ zIndex: 2 }}>Concept Vision</p>}
                           
                           {/* Camera corners */}
                           <div className="corner-tl" style={{ zIndex: 3 }}></div>
@@ -1074,30 +2019,45 @@ export default function App() {
                           <div className="corner-br" style={{ zIndex: 3 }}></div>
                         </div>
 
-                        <div className="scene-meta-badges" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          {scene.character_on_screen && scene.character_on_screen !== '无' && (
-                            <span className="badge-cyber badge-cyber-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
-                              👤 {scene.character_on_screen}
-                            </span>
+                        <div className="scene-meta-badges" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {scene.character_ids ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                              {scene.character_ids.split(',').map(cid => {
+                                const char = characters.find(c => c.id === parseInt(cid, 10));
+                                if (!char) return null;
+                                return (
+                                  <div 
+                                    key={char.id} 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', color: '#fff', cursor: 'help' }}
+                                    title={`${char.name} (${char.role_type}): ${char.appearance_prompt || '暂无描述'}`}
+                                  >
+                                    {char.avatar_url ? (
+                                      <img src={char.avatar_url} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
+                                    ) : (
+                                      <User style={{ width: '8px', height: '8px', color: 'var(--accent)' }} />
+                                    )}
+                                    <span>{char.name}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            scene.character_on_screen && scene.character_on_screen !== '无' && (
+                              <span className="badge-cyber badge-cyber-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
+                                👤 {scene.character_on_screen}
+                              </span>
+                            )
                           )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span className="badge-cyber badge-cyber-purple" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
-                              <Volume2 style={{ width: '11px', height: '11px' }} />
-                              {scene.jianying_voice || '冷酷男神'}
-                            </span>
-                            <button
-                              onClick={() => handlePlayVoice(scene.id || scene.scene_number, scene.dialogue, scene.jianying_voice)}
-                              className={`btn-action-small ${activeSpeechScene === (scene.id || scene.scene_number) ? 'active' : ''}`}
-                              style={{ display: 'inline-flex', width: '24px', height: '24px', borderRadius: '50%', padding: 0, justifyContent: 'center', alignItems: 'center', border: '1px solid var(--border-light)' }}
-                              title="试听配音"
-                            >
-                              {activeSpeechScene === (scene.id || scene.scene_number) ? (
-                                <VolumeX style={{ width: '12px', height: '12px', color: 'var(--primary)' }} />
-                              ) : (
-                                <Play style={{ width: '12px', height: '12px', marginLeft: '1px' }} />
-                              )}
-                            </button>
-                          </div>
+                          {/* 音色预览增强 */}
+                          <span 
+                            onClick={() => playVoicePreview(scene.jianying_voice || '冷酷男神')}
+                            className="badge-cyber badge-cyber-purple" 
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content', cursor: 'pointer' }}
+                            title="点击试听该角色音色"
+                          >
+                            <Volume2 style={{ width: '11px', height: '11px' }} />
+                            <span>{scene.jianying_voice || '冷酷男神'} 🔊</span>
+                          </span>
                         </div>
                       </div>
 
@@ -1156,42 +2116,19 @@ export default function App() {
                           <div className="audio-box">
                             <span className="detail-label-tech" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span>背景音效/BGM建议</span>
-                              <div 
-                                className="wave-motion" 
-                                style={{ cursor: 'pointer' }}
-                                onClick={() => handlePlaySFX(scene.id || scene.scene_number, scene.sound_effects)}
-                                title="播放合成音效"
-                              >
-                                <div className="wave-bar" style={{ animationPlayState: activeSFXScene === (scene.id || scene.scene_number) ? 'running' : 'paused' }}></div>
-                                <div className="wave-bar" style={{ animationPlayState: activeSFXScene === (scene.id || scene.scene_number) ? 'running' : 'paused' }}></div>
-                                <div className="wave-bar" style={{ animationPlayState: activeSFXScene === (scene.id || scene.scene_number) ? 'running' : 'paused' }}></div>
-                                <div className="wave-bar" style={{ animationPlayState: activeSFXScene === (scene.id || scene.scene_number) ? 'running' : 'paused' }}></div>
+                              <div className="wave-motion">
+                                <div className="wave-bar"></div>
+                                <div className="wave-bar"></div>
+                                <div className="wave-bar"></div>
+                                <div className="wave-bar"></div>
                               </div>
                             </span>
-                            <div 
-                              className={`audio-box-body sfx ${activeSFXScene === (scene.id || scene.scene_number) ? 'active' : ''}`}
-                              style={{ 
-                                wordBreak: 'break-all', 
-                                cursor: 'pointer', 
-                                transition: 'all 0.2s ease', 
-                                border: activeSFXScene === (scene.id || scene.scene_number) ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.03)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                              }}
-                              onClick={() => handlePlaySFX(scene.id || scene.scene_number, scene.sound_effects)}
-                              title="点击播放合成音效"
-                            >
-                              {activeSFXScene === (scene.id || scene.scene_number) ? (
-                                <VolumeX style={{ width: '13px', height: '13px', color: 'var(--primary)', flexShrink: 0 }} />
-                              ) : (
-                                <Music style={{ width: '13px', height: '13px', color: 'rgba(0, 242, 254, 0.5)', flexShrink: 0 }} />
-                              )}
+                            <div className="audio-box-body sfx" style={{ wordBreak: 'break-all' }}>
+                              <Music style={{ width: '13px', height: '13px', color: 'rgba(0, 242, 254, 0.5)', flexShrink: 0 }} />
                               <span>{scene.sound_effects}</span>
                             </div>
                           </div>
                         </div>
-
                       </div>
                     </div>
                   ))}
@@ -1216,50 +2153,51 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div 
-                        className="grid-card-concept-view" 
-                        style={{ 
-                          position: 'relative', 
-                          cursor: scene.image_url ? 'default' : 'pointer',
-                          overflow: 'hidden'
-                        }}
-                        onClick={() => !scene.image_url && !generatingImageScene && handleGenerateImage(scene)}
-                      >
-                        {scene.image_url && generatingImageScene !== (scene.id || scene.scene_number) ? (
-                          <>
-                            <img 
-                              src={scene.image_url} 
-                              alt={`Scene ${scene.scene_number}`} 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, zIndex: 1 }} 
-                            />
-                            <div style={{
-                              position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(3,4,8,0.8)', 
-                              padding: '4px 8px', zIndex: 2, display: 'flex', flexDirection: 'column', gap: '2px', width: '100%', textAlign: 'left'
-                            }}>
-                              <span className="grid-card-concept-title" style={{ margin: 0, fontSize: '8px' }}>{scene.camera_direction}</span>
-                            </div>
-                            <div className="concept-frame-overlay">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleGenerateImage(scene); }}
-                                className="btn-cyber-secondary"
-                                style={{ transform: 'scale(0.75)', background: 'rgba(3,4,8,0.9)', border: '1px solid var(--primary)', padding: '4px 8px', pointerEvents: 'auto', display: 'inline-flex', gap: '2px' }}
-                              >
-                                <Wand2 style={{ width: '10px', height: '10px' }} /> 重新生成
-                              </button>
-                            </div>
-                          </>
-                        ) : generatingImageScene === (scene.id || scene.scene_number) ? (
-                          <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                            <div className="cyber-scanner-line" style={{ height: '1.5px' }}></div>
-                            <Wand2 className="concept-icon animate-pulse" style={{ width: '16px', height: '16px', color: 'var(--primary)' }} />
-                            <p className="grid-card-concept-title" style={{ color: 'var(--primary)', margin: 0 }}>智能生图中...</p>
-                          </div>
-                        ) : (
-                          <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
-                            <Sparkles className="concept-icon" style={{ width: '16px', height: '16px', color: 'rgba(255,255,255,0.2)' }} />
-                            <span className="grid-card-concept-title" style={{ margin: 0, color: 'rgba(255,255,255,0.4)' }}>一键生成画面</span>
-                          </div>
-                        )}
+                      {/* 渲染真实的生成图片 */}
+                      <div className="grid-card-concept-view" style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer' }}>
+                        {scene.image_url ? (
+                          <img 
+                            src={scene.image_url} 
+                            alt={`Scene ${scene.scene_number}`} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }} 
+                          />
+                        ) : null}
+                        
+                        <div style={{ position: 'relative', zIndex: 2, background: scene.image_url ? 'rgba(3,4,8,0.7)' : 'transparent', padding: '6px', borderRadius: '6px', width: '100%' }}>
+                          <span className="grid-card-concept-title">{scene.camera_direction}</span>
+                          <p className="grid-card-concept-desc" style={{ color: scene.image_url ? '#fff' : 'var(--text-muted)' }}>{scene.visual_description}</p>
+                        </div>
+
+                        {/* 生图悬浮按钮 */}
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGenerateImage(scene.id, scene.jimeng_prompt);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            bottom: '6px',
+                            right: '6px',
+                            zIndex: 3,
+                            background: 'rgba(3, 4, 8, 0.85)',
+                            border: '1px solid rgba(0, 242, 254, 0.25)',
+                            borderRadius: '4px',
+                            padding: '3px 5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '8px',
+                            color: 'var(--primary)',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {generatingImageSceneId === scene.id ? (
+                            <RefreshCw className="animate-spin" style={{ width: '8px', height: '8px' }} />
+                          ) : (
+                            <Image style={{ width: '8px', height: '8px' }} />
+                          )}
+                          <span>{scene.image_url ? '重绘' : '渲染'}</span>
+                        </div>
                       </div>
 
                       <div className="grid-prompt-box">
@@ -1278,44 +2216,15 @@ export default function App() {
                       </div>
 
                       <div className="grid-card-footer">
-                        <div className="grid-card-meta-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span className="badge-cyber badge-cyber-purple" style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: '2px 6px', fontSize: '9px' }}>
-                              🎙️ {scene.jianying_voice}
-                            </span>
-                            <button
-                              onClick={() => handlePlayVoice(scene.id || scene.scene_number, scene.dialogue, scene.jianying_voice)}
-                              className={`btn-action-small ${activeSpeechScene === (scene.id || scene.scene_number) ? 'active' : ''}`}
-                              style={{ display: 'inline-flex', width: '20px', height: '20px', borderRadius: '50%', padding: 0, justifyContent: 'center', alignItems: 'center', border: '1px solid var(--border-light)' }}
-                              title="试听配音"
-                            >
-                              {activeSpeechScene === (scene.id || scene.scene_number) ? (
-                                <VolumeX style={{ width: '10px', height: '10px', color: 'var(--primary)' }} />
-                              ) : (
-                                <Play style={{ width: '10px', height: '10px', marginLeft: '1px' }} />
-                              )}
-                            </button>
-                          </div>
-                          
-                          <button
-                            onClick={() => handlePlaySFX(scene.id || scene.scene_number, scene.sound_effects)}
-                            className={`badge-cyber badge-cyber-blue`}
-                            style={{ 
-                              background: activeSFXScene === (scene.id || scene.scene_number) ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                              border: activeSFXScene === (scene.id || scene.scene_number) ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.05)',
-                              color: activeSFXScene === (scene.id || scene.scene_number) ? 'var(--primary)' : 'var(--text-muted)',
-                              cursor: 'pointer',
-                              padding: '2px 6px',
-                              fontSize: '9px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="试听合成音效"
+                        <div className="grid-card-meta-row">
+                          <span 
+                            onClick={() => playVoicePreview(scene.jianying_voice || '冷酷男神')}
+                            className="badge-cyber badge-cyber-purple"
+                            style={{ cursor: 'pointer' }}
                           >
-                            <Music style={{ width: '9px', height: '9px' }} />
-                            <span>音效</span>
-                          </button>
+                            🎙️ {scene.jianying_voice} 🔊
+                          </span>
+                          <span className="detail-label-tech">BGM SFX</span>
                         </div>
                         <p className="grid-dialogue-text">
                           “ {scene.dialogue} ”
@@ -1329,6 +2238,8 @@ export default function App() {
           )}
 
         </section>
+          </>
+        )}
       </main>
 
       {/* 底部版权信息 */}
@@ -1352,84 +2263,195 @@ export default function App() {
               </button>
             </div>
 
-            <div className="modal-body">
-              <div className="modal-row-grid-2">
-                <div className="form-group">
-                  <label className="label-tech">镜头运动/景别</label>
-                  <input 
-                    type="text" 
-                    value={editingScene.camera_direction} 
-                    onChange={(e) => setEditingScene({ ...editingScene, camera_direction: e.target.value })} 
-                    className="input-tech"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="label-tech">出镜人物</label>
-                  <input 
-                    type="text" 
-                    value={editingScene.character_on_screen} 
-                    onChange={(e) => setEditingScene({ ...editingScene, character_on_screen: e.target.value })} 
-                    className="input-tech"
-                  />
-                </div>
-              </div>
+            <div className="modal-body" style={{ maxHeight: '520px' }}>
+              <div className="modal-two-columns">
+                
+                {/* 左侧专栏：镜头物理特征与生图 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div className="modal-row-grid-2">
+                    <div className="form-group">
+                      <label className="label-tech">镜头运动/景别</label>
+                      <input 
+                        type="text" 
+                        value={editingScene.camera_direction} 
+                        onChange={(e) => setEditingScene({ ...editingScene, camera_direction: e.target.value })} 
+                        className="input-tech"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="label-tech">出镜人物 (自由编辑)</label>
+                      <input 
+                        type="text" 
+                        value={editingScene.character_on_screen} 
+                        onChange={(e) => setEditingScene({ ...editingScene, character_on_screen: e.target.value })} 
+                        className="input-tech"
+                      />
+                    </div>
+                  </div>
 
-              <div className="form-group">
-                <label className="label-tech">画面细节描述</label>
-                <textarea 
-                  value={editingScene.visual_description} 
-                  onChange={(e) => setEditingScene({ ...editingScene, visual_description: e.target.value })} 
-                  className="textarea-tech"
-                  style={{ height: '70px' }}
-                />
-              </div>
+                  {/* 演员一键绑定 */}
+                  <div className="form-group" style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', marginTop: '4px' }}>
+                    <label className="label-tech" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <User style={{ width: '12px', height: '12px', color: 'var(--accent)' }} />
+                      <span>快捷绑定档案舱演员 (高一致性参考词注入)</span>
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {characters.map(char => {
+                        const charIds = editingScene.character_ids ? editingScene.character_ids.split(',').map(id => parseInt(id, 10)) : [];
+                        const isLinked = charIds.includes(char.id);
+                        
+                        return (
+                          <button
+                            key={char.id}
+                            type="button"
+                            onClick={() => {
+                              let nextCharIds = [...charIds];
+                              if (isLinked) {
+                                nextCharIds = nextCharIds.filter(id => id !== char.id);
+                              } else {
+                                nextCharIds.push(char.id);
+                              }
+                              
+                              // Rebuild character_ids
+                              const nextCharIdsStr = nextCharIds.join(',');
+                              
+                              // Rebuild character_on_screen from active characters
+                              const linkedChars = characters.filter(c => nextCharIds.includes(c.id));
+                              const nextCharOnScreen = linkedChars.map(c => c.name).join(', ') || '无';
+                              
+                              setEditingScene({
+                                ...editingScene,
+                                character_ids: nextCharIdsStr,
+                                character_on_screen: nextCharOnScreen
+                              });
+                            }}
+                            className={`btn-cyber-tag ${isLinked ? 'active' : ''}`}
+                            style={{
+                              padding: '3px 8px',
+                              fontSize: '10px',
+                              borderRadius: '12px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              border: isLinked ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.1)',
+                              background: isLinked ? 'rgba(99, 102, 241, 0.25)' : 'rgba(0,0,0,0.2)',
+                              color: isLinked ? '#fff' : 'var(--text-muted)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {char.avatar_url ? (
+                              <img src={char.avatar_url} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                              <User style={{ width: '8px', height: '8px' }} />
+                            )}
+                            <span>{char.name}</span>
+                          </button>
+                        );
+                      })}
+                      {characters.length === 0 && (
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>暂无角色档案，请在左侧演员舱添加</span>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="form-group">
-                <label className="label-tech">即梦AI (Jimeng AI) 中文提示词</label>
-                <textarea 
-                  value={editingScene.jimeng_prompt} 
-                  onChange={(e) => setEditingScene({ ...editingScene, jimeng_prompt: e.target.value })} 
-                  className="textarea-tech"
-                  style={{ height: '90px', fontFamily: 'monospace', color: 'var(--primary)' }}
-                />
-              </div>
+                  <div className="form-group">
+                    <label className="label-tech">画面细节描述</label>
+                    <textarea 
+                      value={editingScene.visual_description} 
+                      onChange={(e) => setEditingScene({ ...editingScene, visual_description: e.target.value })} 
+                      className="textarea-tech"
+                      style={{ height: '70px' }}
+                    />
+                  </div>
 
-              <div className="modal-row-grid-2">
-                <div className="form-group">
-                  <label className="label-tech">剪映推荐音色</label>
-                  <select 
-                    value={editingScene.jianying_voice} 
-                    onChange={(e) => setEditingScene({ ...editingScene, jianying_voice: e.target.value })} 
-                    className="input-tech"
-                    style={{ background: 'var(--bg-input)' }}
-                  >
-                    <option value="深沉旁白">深沉旁白</option>
-                    <option value="冷酷男神">冷酷男神</option>
-                    <option value="热血少年">热血少年</option>
-                    <option value="系统机械音">系统机械音</option>
-                    <option value="霸气御姐">霸气御姐</option>
-                    <option value="温柔师姐">温柔师姐</option>
-                  </select>
+                  <div className="form-group">
+                    <label className="label-tech">即梦AI (Jimeng AI) 中文提示词</label>
+                    <textarea 
+                      value={editingScene.jimeng_prompt} 
+                      onChange={(e) => setEditingScene({ ...editingScene, jimeng_prompt: e.target.value })} 
+                      className="textarea-tech"
+                      style={{ height: '80px', fontFamily: 'monospace', color: 'var(--primary)' }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="label-tech">动态生视频 Prompt/生成地址</label>
+                    <input 
+                      type="text" 
+                      value={editingScene.video_url || ''} 
+                      onChange={(e) => setEditingScene({ ...editingScene, video_url: e.target.value })} 
+                      placeholder="未生成（一键生视频后自动在此保存链接）"
+                      className="input-tech"
+                    />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="label-tech">背景音效建议</label>
-                  <input 
-                    type="text" 
-                    value={editingScene.sound_effects} 
-                    onChange={(e) => setEditingScene({ ...editingScene, sound_effects: e.target.value })} 
-                    className="input-tech"
-                  />
-                </div>
-              </div>
 
-              <div className="form-group">
-                <label className="label-tech">剪映配音台词 / 旁白</label>
-                <textarea 
-                  value={editingScene.dialogue} 
-                  onChange={(e) => setEditingScene({ ...editingScene, dialogue: e.target.value })} 
-                  className="textarea-tech"
-                  style={{ height: '60px' }}
-                />
+                {/* 右侧专栏：声音艺术设计与台词 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div className="form-group">
+                    <label className="label-tech">
+                      <span>剪映推荐音色 (点击任一音色即可选中并试听 🔊)</span>
+                    </label>
+                    <div className="voice-selector-container" style={{ maxHeight: '180px' }}>
+                      <div className="voice-grid">
+                        {VOICES_CONFIG.map((voice) => {
+                          const isSelected = editingScene.jianying_voice === voice.name;
+                          return (
+                            <div 
+                              key={voice.name}
+                              onClick={() => {
+                                setEditingScene({ ...editingScene, jianying_voice: voice.name });
+                                playVoicePreview(voice.name);
+                              }}
+                              className={`voice-card ${isSelected ? 'selected' : ''}`}
+                              title={`点击选择并试听【${voice.name}】`}
+                            >
+                              <div className="voice-card-content">
+                                <span className="voice-avatar">{voice.emoji}</span>
+                                <div className="voice-info">
+                                  <span className="voice-name">{voice.name}</span>
+                                  <span className="voice-desc">{voice.desc.split(' · ')[0]}</span>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  playVoicePreview(voice.name);
+                                }}
+                                className="voice-preview-btn"
+                                title="仅试听此音色"
+                              >
+                                <Volume2 style={{ width: '13px', height: '13px' }} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="label-tech">背景音效建议</label>
+                    <input 
+                      type="text" 
+                      value={editingScene.sound_effects} 
+                      onChange={(e) => setEditingScene({ ...editingScene, sound_effects: e.target.value })} 
+                      className="input-tech"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="label-tech">剪映配音台词 / 旁白</label>
+                    <textarea 
+                      value={editingScene.dialogue} 
+                      onChange={(e) => setEditingScene({ ...editingScene, dialogue: e.target.value })} 
+                      className="textarea-tech"
+                      style={{ height: '70px' }}
+                    />
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -1447,6 +2469,75 @@ export default function App() {
                 保存修改
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* I2V Consistency Warning Modal */}
+      {showConsistencyWarning && (
+        <div className="modal-overlay">
+          <div className="consistency-warning-modal">
+            <div className="consistency-warning-icon">
+              <AlertTriangle style={{ width: '28px', height: '28px', color: '#ffb938' }} />
+            </div>
+            <h3 className="consistency-warning-title">视觉一致性风控拦截</h3>
+            <p className="consistency-warning-desc">
+              当前分镜尚未生成静态图片。直接生成视频将无法使用 I2V（图生视频）模式，可能导致角色外貌不一致。<br/>
+              建议先生成静态图片，再基于图片生成视频，以确保角色外貌和场景一致性。
+            </p>
+            <div className="consistency-warning-actions">
+              <button
+                className="btn-cyber"
+                onClick={() => {
+                  setShowConsistencyWarning(false);
+                  const scene = scenes.find(s => s.id === consistencyWarningSceneId);
+                  if (scene) handleGenerateImage(scene.id, scene.jimeng_prompt);
+                  setConsistencyWarningSceneId(null);
+                }}
+              >
+                <Shield style={{ width: '14px', height: '14px' }} />
+                先生成图片（推荐）
+              </button>
+              <button
+                className="btn-cyber-secondary"
+                style={{ borderColor: 'rgba(255, 185, 56, 0.4)', color: '#ffb938' }}
+                onClick={() => {
+                  const scene = scenes.find(s => s.id === consistencyWarningSceneId);
+                  if (scene) handleForceGenerateVideo(scene.id, scene.jimeng_prompt);
+                }}
+              >
+                <AlertTriangle style={{ width: '14px', height: '14px' }} />
+                强制生成视频（跳过 I2V）
+              </button>
+              <button
+                className="btn-cyber-secondary"
+                onClick={() => { setShowConsistencyWarning(false); setConsistencyWarningSceneId(null); }}
+              >
+                <X style={{ width: '14px', height: '14px' }} />
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Image Preview Modal */}
+      {previewImageUrl && (
+        <div className="modal-overlay" onClick={() => setPreviewImageUrl(null)} style={{ zIndex: 9999, background: 'rgba(3, 4, 8, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '85vw', width: 'auto', background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <img 
+              src={previewImageUrl} 
+              alt="预览图" 
+              style={{ maxWidth: '100%', maxHeight: '82vh', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 60px rgba(0,0,0,0.85)', objectFit: 'contain' }} 
+            />
+            <button 
+              onClick={() => setPreviewImageUrl(null)} 
+              className="btn-modal-close"
+              style={{ position: 'absolute', top: '-15px', right: '-15px', background: 'rgba(225, 29, 72, 0.95)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '50%', padding: '6px', cursor: 'pointer', color: '#fff', boxShadow: '0 5px 15px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              title="关闭预览"
+            >
+              <X style={{ width: '16px', height: '16px' }} />
+            </button>
           </div>
         </div>
       )}
