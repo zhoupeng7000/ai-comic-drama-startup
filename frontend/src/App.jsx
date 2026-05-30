@@ -136,6 +136,17 @@ export default function App() {
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const [showConsistencyWarning, setShowConsistencyWarning] = useState(false);
   const [consistencyWarningSceneId, setConsistencyWarningSceneId] = useState(null);
+
+  // v4.0 Workspace Fusion & Drill-down states
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [activeAssetModal, setActiveAssetModal] = useState(null);
+  const [sceneryList, setSceneryList] = useState([]);
+  const [generatingSceneryId, setGeneratingSceneryId] = useState(null);
+  const [bgmPreset, setBgmPreset] = useState(() => localStorage.getItem('bgm_preset') || 'none');
+  const [bgmCustomUrl, setBgmCustomUrl] = useState(() => localStorage.getItem('bgm_custom_url') || '');
+  const [synthesizingAll, setSynthesizingAll] = useState(false);
+  const [synthesizeProgress, setSynthesizeProgress] = useState(0);
+  const [exportingJianying, setExportingJianying] = useState(false);
   
   // Global style engine states
   const [masterSeed, setMasterSeed] = useState(() => {
@@ -173,6 +184,7 @@ export default function App() {
   useEffect(() => {
     if (currentStoryboard) {
       fetchCharacters(currentStoryboard.id);
+      fetchScenery(currentStoryboard.id);
       if (currentStoryboard.master_seed !== undefined && currentStoryboard.master_seed !== null) {
         setMasterSeed(currentStoryboard.master_seed);
       }
@@ -182,8 +194,13 @@ export default function App() {
       if (currentStoryboard.style_ref_url) {
         setStyleRefUrl(currentStoryboard.style_ref_url);
       }
+      setBgmPreset(currentStoryboard.bgm_preset || 'none');
+      setBgmCustomUrl(currentStoryboard.bgm_custom_url || '');
     } else {
       setCharacters([]);
+      setSceneryList([]);
+      setBgmPreset('none');
+      setBgmCustomUrl('');
     }
   }, [currentStoryboard]);
 
@@ -332,6 +349,215 @@ export default function App() {
       });
     } catch (err) {
       console.error('Failed to save style settings:', err);
+    }
+  };
+
+  // ----------------------------------------------------
+  // v4.0 Scenery, BGM, TTS, and CapCut API Methods
+  // ----------------------------------------------------
+
+  const fetchScenery = async (storyboardId) => {
+    try {
+      const res = await fetch(`/api/scenery/${storyboardId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSceneryList(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch scenery list:', err);
+    }
+  };
+
+  const handleAddScenery = async () => {
+    if (!currentStoryboard) return;
+    try {
+      const res = await fetch('/api/scenery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyboard_id: currentStoryboard.id,
+          name: '新场景空间',
+          prompt: ''
+        })
+      });
+      if (res.ok) {
+        fetchScenery(currentStoryboard.id);
+      }
+    } catch (err) {
+      console.error('Failed to add scenery:', err);
+    }
+  };
+
+  const handleUpdateScenery = async (sceneryId, updatedFields) => {
+    try {
+      const res = await fetch(`/api/scenery/${sceneryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedFields)
+      });
+      if (res.ok) {
+        if (currentStoryboard) fetchScenery(currentStoryboard.id);
+      }
+    } catch (err) {
+      console.error('Failed to update scenery:', err);
+    }
+  };
+
+  const handleDeleteScenery = async (sceneryId) => {
+    if (!confirm('确定要删除该场景空间吗？')) return;
+    try {
+      const res = await fetch(`/api/scenery/${sceneryId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setActiveAssetModal(null);
+        if (currentStoryboard) fetchScenery(currentStoryboard.id);
+      }
+    } catch (err) {
+      console.error('Failed to delete scenery:', err);
+    }
+  };
+
+  const handleGenerateSceneryImage = async (sceneryId, prompt) => {
+    setGeneratingSceneryId(sceneryId);
+    try {
+      const res = await fetch(`/api/scenery/${sceneryId}/generate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, stylePreset, masterSeed, styleRefUrl })
+      });
+      if (res.ok) {
+        if (currentStoryboard) fetchScenery(currentStoryboard.id);
+      } else {
+        const errData = await res.json();
+        alert('场景原画生成失败: ' + (errData.error || '未知错误'));
+      }
+    } catch (err) {
+      console.error('Failed to generate scenery image:', err);
+      alert('场景原画生成请求出错');
+    } finally {
+      setGeneratingSceneryId(null);
+    }
+  };
+
+  const handleUploadBgm = async (e) => {
+    if (!currentStoryboard) return;
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('bgm', file);
+    try {
+      const res = await fetch(`/api/storyboard/${currentStoryboard.id}/upload-bgm`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBgmCustomUrl(data.bgm_custom_url);
+        setBgmPreset('none');
+        alert('自定义背景音乐上传成功！');
+      }
+    } catch (err) {
+      console.error('Failed to upload BGM:', err);
+      alert('背景音乐上传失败');
+    }
+  };
+
+  const handleSelectBgmPreset = async (val) => {
+    if (!currentStoryboard) return;
+    setBgmPreset(val);
+    if (val !== 'none') {
+      setBgmCustomUrl('');
+    }
+    try {
+      await fetch(`/api/storyboard/${currentStoryboard.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bgm_preset: val,
+          bgm_custom_url: val === 'none' ? '' : null
+        })
+      });
+    } catch (err) {
+      console.error('Failed to select BGM preset:', err);
+    }
+  };
+
+  const handleBatchSynthesizeTTS = async () => {
+    if (!currentStoryboard || scenes.length === 0) return;
+    setSynthesizingAll(true);
+    setSynthesizeProgress(0);
+    try {
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        setSynthesizeProgress(Math.round((i / scenes.length) * 100));
+        
+        let voiceName = scene.jianying_voice || '故事旁白';
+        let dialogueText = scene.dialogue || '';
+        
+        if (dialogueText.trim()) {
+          const res = await fetch('/api/scene/generate-tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scene_id: scene.id,
+              voice_name: voiceName,
+              text: dialogueText,
+              tts_api_key: ttsApiKey,
+              tts_api_url: ttsApiUrl,
+              tts_model_name: ttsModelName
+            })
+          });
+          if (!res.ok) {
+            console.error(`Failed to synthesize scene ${scene.scene_number}`);
+          }
+        }
+      }
+      setSynthesizeProgress(100);
+      setTimeout(async () => {
+        setSynthesizingAll(false);
+        setSynthesizeProgress(0);
+        // Silent reload
+        const res = await fetch(`/api/storyboard/${currentStoryboard.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentStoryboard(data.storyboard);
+          setScenes(data.scenes);
+        }
+        alert('所有分镜台词AI配音合成完毕！');
+      }, 800);
+    } catch (err) {
+      console.error('Failed to batch synthesize TTS:', err);
+      alert('批量语音合成请求出错');
+      setSynthesizingAll(false);
+    }
+  };
+
+  const handleExportJianyingDraft = async () => {
+    if (!currentStoryboard) return;
+    setExportingJianying(true);
+    try {
+      const res = await fetch(`/api/storyboard/${currentStoryboard.id}/export-jianying`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Jianying_Draft_Storyboard_${currentStoryboard.id}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert('剪映工程打包失败，请确保您已合成语音和渲染画面');
+      }
+    } catch (err) {
+      console.error('Failed to export CapCut draft:', err);
+      alert('打包导出剪映草稿请求出错');
+    } finally {
+      setExportingJianying(false);
     }
   };
 
@@ -1046,262 +1272,197 @@ export default function App() {
 
         <div className="header-actions">
           <button 
-            onClick={() => setShowSettings(!showSettings)} 
-            className={`btn-cyber-secondary ${showSettings ? 'active' : ''}`}
+            onClick={() => setShowDrawer(!showDrawer)} 
+            className={`btn-cyber-secondary ${showDrawer ? 'active' : ''}`}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Settings style={{ width: '15px', height: '15px' }} />
-            高级智脑配置
+            <span>高级智脑与风格配置舱</span>
           </button>
         </div>
       </header>
 
-      {/* 设置收纳折叠面板 (双控制台分裂重构) */}
-      {showSettings && (
-        <div className="settings-accordion">
-          <div className="settings-header">
-            <h3 className="settings-title">
-              <Cpu style={{ width: '16px', height: '16px' }} /> 2026 双向 AI 智脑配置中心
-            </h3>
-            <span className="settings-badge">已加密存储于浏览器 LocalStorage</span>
-          </div>
-          
-          <div className="settings-grid">
-            
-            {/* 1. 剧本分镜解析 LLM */}
-            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
-              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Cpu style={{ width: '13px', height: '13px' }} /> 1. 剧本解析大模型配置 (LLM)
-              </h4>
-              <div className="form-group">
-                <label className="label-tech">DeepSeek API KEY</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="password" 
-                    value={apiKey} 
-                    onChange={(e) => setApiKey(e.target.value)} 
-                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="input-tech"
-                    style={{ paddingRight: '36px' }}
-                  />
-                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="label-tech">API 请求网关 (BASE URL)</label>
-                <input 
-                  type="text" 
-                  value={apiUrl} 
-                  onChange={(e) => setUrl(e.target.value)} 
-                  placeholder="https://api.deepseek.com/v1/chat/completions"
-                  className="input-tech"
-                />
-              </div>
-              <div className="form-group">
-                <label className="label-tech">模型型号 (MODEL NAME)</label>
-                <input 
-                  type="text" 
-                  value={modelName} 
-                  onChange={(e) => setModelName(e.target.value)} 
-                  placeholder="deepseek-chat"
-                  className="input-tech"
-                />
-              </div>
-              <div className="connection-test-row">
-                <button onClick={handleTestConnection} disabled={connectionStatus === 'testing'} className="btn-test-connection">
-                  {connectionStatus === 'testing' ? '正在联调...' : '测试 LLM 连通性'}
-                </button>
-                {connectionStatus === 'success' && (
-                  <div className="connection-banner success">
-                    <Check style={{ width: '12px', height: '12px' }} />
-                    <span>联通成功 ({connectionLatency}ms)</span>
-                  </div>
-                )}
-                {connectionStatus === 'error' && (
-                  <div className="connection-banner error" title={connectionError}>
-                    <X style={{ width: '12px', height: '12px' }} />
-                    <span>失败</span>
-                  </div>
-                )}
-              </div>
+      {/* 右侧滑动智脑与风格配置舱 (v4.0 Premium Sliding Drawer) */}
+      <div className={`drawer-overlay ${showDrawer ? 'open' : ''}`} onClick={() => setShowDrawer(false)}>
+        <div className={`style-master-drawer glass-card ${showDrawer ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 800, color: '#fff' }}>
+                <Cpu style={{ width: '16px', height: '16px', color: 'var(--primary)' }} />
+                <span>高级智脑与风格配置舱</span>
+              </h3>
+              <button onClick={() => setShowDrawer(false)} className="btn-drawer-close" style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
+                <X style={{ width: '18px', height: '18px' }} />
+              </button>
             </div>
 
-            {/* 2. 分镜一键生图 T2I */}
-            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
-              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--secondary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Image style={{ width: '13px', height: '13px' }} /> 2. 分镜一键生图大模型配置 (T2I)
-              </h4>
-              <div className="form-group">
-                <label className="label-tech">生图 API KEY (SiliconFlow/SD/Flux)</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="password" 
-                    value={imageApiKey} 
-                    onChange={(e) => setImageApiKey(e.target.value)} 
-                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="input-tech"
-                    style={{ paddingRight: '36px' }}
-                  />
-                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+            <div className="drawer-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: '4px' }}>
+              
+              {/* 全局风格与种子引擎 */}
+              <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.04)', background: 'rgba(0,0,0,0.15)' }}>
+                <h4 className="settings-card-title" style={{ color: 'var(--primary)' }}>
+                  <Palette style={{ width: '13px', height: '13px' }} />
+                  <span>全局画风与导演种子控制</span>
+                </h4>
+                
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="label-tech">全局风格预设 (Style Presets)</label>
+                  <div className="style-preset-grid" style={{ marginTop: '8px' }}>
+                    {STYLE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.value}
+                        className={`style-preset-chip ${stylePreset === preset.value ? 'active' : ''}`}
+                        onClick={() => { setStylePreset(preset.value); handleSaveStyleSettings(); }}
+                        title={preset.desc}
+                        type="button"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="modal-row-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="label-tech">种子锁定 (Seed)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                      <input
+                        type="number"
+                        className="seed-input"
+                        style={{ width: '100%', height: '32px' }}
+                        value={masterSeed}
+                        onChange={(e) => setMasterSeed(parseInt(e.target.value) || -1)}
+                        disabled={seedLocked}
+                      />
+                      <button
+                        type="button"
+                        className={`btn-seed-lock ${seedLocked ? 'locked' : ''}`}
+                        onClick={() => { setSeedLocked(!seedLocked); handleSaveStyleSettings(); }}
+                        title={seedLocked ? '解锁种子' : '锁定种子'}
+                        style={{ height: '32px', width: '32px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        {seedLocked ? <Lock style={{ width: '12px', height: '12px' }} /> : <Unlock style={{ width: '12px', height: '12px' }} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="label-tech">风格参考图 URL (SREF)</label>
+                    <input
+                      type="text"
+                      className="seed-input"
+                      style={{ width: '100%', height: '32px', marginTop: '6px' }}
+                      value={styleRefUrl}
+                      onChange={(e) => setStyleRefUrl(e.target.value)}
+                      onBlur={handleSaveStyleSettings}
+                      placeholder="SREF 垫图 URL..."
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="form-group">
-                <label className="label-tech">生图 API 网关 (BASE URL)</label>
-                <input 
-                  type="text" 
-                  value={imageApiUrl} 
-                  onChange={(e) => setImageApiUrl(e.target.value)} 
-                  placeholder="https://api.siliconflow.cn/v1/images/generations"
-                  className="input-tech"
-                />
-              </div>
-              <div className="form-group">
-                <label className="label-tech">生图模型型号 (MODEL NAME)</label>
-                <input 
-                  type="text" 
-                  value={imageModelName} 
-                  onChange={(e) => setImageModelName(e.target.value)} 
-                  placeholder="black-forest-labs/FLUX.1-schnell"
-                  className="input-tech"
-                />
-              </div>
-              <div className="connection-test-row">
-                <button onClick={handleTestImageConnection} disabled={imageConnectionStatus === 'testing'} className="btn-test-connection" style={{ borderColor: 'var(--secondary)', color: '#d182ff' }}>
-                  {imageConnectionStatus === 'testing' ? '正在联调...' : '测试生图 连通性'}
-                </button>
-                {imageConnectionStatus === 'success' && (
-                  <div className="connection-banner success" style={{ borderColor: 'rgba(185, 39, 252, 0.4)', color: '#d182ff' }}>
-                    <Check style={{ width: '12px', height: '12px' }} />
-                    <span>联通成功 ({imageConnectionLatency}ms)</span>
-                  </div>
-                )}
-                {imageConnectionStatus === 'error' && (
-                  <div className="connection-banner error" title={imageConnectionError}>
-                    <X style={{ width: '12px', height: '12px' }} />
-                    <span>失败</span>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            {/* 3. 一键生视频 T2V */}
-            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
-              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: '#ffb938', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Tv style={{ width: '13px', height: '13px' }} /> 3. 一键生视频大模型配置 (T2V)
-              </h4>
-              <div className="form-group">
-                <label className="label-tech">生视频 API KEY (SiliconFlow/Luma)</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="password" 
-                    value={videoApiKey} 
-                    onChange={(e) => setVideoApiKey(e.target.value)} 
-                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="input-tech"
-                    style={{ paddingRight: '36px' }}
-                  />
-                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+              {/* 1. 剧本分镜解析 LLM */}
+              <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.15)' }}>
+                <h4 className="settings-card-title" style={{ color: 'var(--primary)' }}>
+                  <Cpu style={{ width: '13px', height: '13px' }} />
+                  <span>1. 剧本解析大模型 (LLM)</span>
+                </h4>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">DeepSeek API KEY</label>
+                  <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" className="input-tech" style={{ height: '32px' }} />
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="label-tech">生视频 API 网关 (BASE URL)</label>
-                <input 
-                  type="text" 
-                  value={videoApiUrl} 
-                  onChange={(e) => setVideoApiUrl(e.target.value)} 
-                  placeholder="https://api.siliconflow.cn/v1/video/generations"
-                  className="input-tech"
-                />
-              </div>
-              <div className="form-group">
-                <label className="label-tech">生视频模型型号 (MODEL NAME)</label>
-                <input 
-                  type="text" 
-                  value={videoModelName} 
-                  onChange={(e) => setVideoModelName(e.target.value)} 
-                  placeholder="luma/aperture-1.0"
-                  className="input-tech"
-                />
-              </div>
-              <div className="connection-test-row">
-                <button onClick={handleTestVideoConnection} disabled={videoConnectionStatus === 'testing'} className="btn-test-connection" style={{ borderColor: '#ffb938', color: '#ffd685' }}>
-                  {videoConnectionStatus === 'testing' ? '正在联调...' : '测试视频 连通性'}
-                </button>
-                {videoConnectionStatus === 'success' && (
-                  <div className="connection-banner success" style={{ borderColor: 'rgba(255, 185, 56, 0.4)', color: '#ffd685' }}>
-                    <Check style={{ width: '12px', height: '12px' }} />
-                    <span>联通成功 ({videoConnectionLatency}ms)</span>
-                  </div>
-                )}
-                {videoConnectionStatus === 'error' && (
-                  <div className="connection-banner error" title={videoConnectionError}>
-                    <X style={{ width: '12px', height: '12px' }} />
-                    <span>失败</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 4. 语音合成大模型 TTS */}
-            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.2)' }}>
-              <h4 style={{ fontSize: '12px', fontWeight: 'bold', color: '#38ff70', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Volume2 style={{ width: '13px', height: '13px' }} /> 4. 语音合成大模型配置 (TTS)
-              </h4>
-              <div className="form-group">
-                <label className="label-tech">语音 API KEY (SiliconFlow/CosyVoice)</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="password" 
-                    value={ttsApiKey} 
-                    onChange={(e) => setTtsApiKey(e.target.value)} 
-                    placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="input-tech"
-                    style={{ paddingRight: '36px' }}
-                  />
-                  <Key style={{ width: '14px', height: '14px', position: 'absolute', right: '12px', top: '13px', color: 'rgba(255,255,255,0.3)' }} />
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">API 请求网关 (BASE URL)</label>
+                  <input type="text" value={apiUrl} onChange={e => setUrl(e.target.value)} placeholder="https://api.deepseek.com/v1/chat/completions" className="input-tech" style={{ height: '32px' }} />
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="label-tech">语音 API 网关 (BASE URL)</label>
-                <input 
-                  type="text" 
-                  value={ttsApiUrl} 
-                  onChange={(e) => setTtsApiUrl(e.target.value)} 
-                  placeholder="https://api.siliconflow.cn/v1/audio/speech"
-                  className="input-tech"
-                />
-              </div>
-              <div className="form-group">
-                <label className="label-tech">语音模型型号 (MODEL NAME)</label>
-                <input 
-                  type="text" 
-                  value={ttsModelName} 
-                  onChange={(e) => setTtsModelName(e.target.value)} 
-                  placeholder="FunAudioLLM/CosyVoice2-0.5B"
-                  className="input-tech"
-                />
-              </div>
-              <div className="connection-test-row">
-                <button onClick={handleTestTtsConnection} disabled={ttsConnectionStatus === 'testing'} className="btn-test-connection" style={{ borderColor: '#38ff70', color: '#8dffa5' }}>
-                  {ttsConnectionStatus === 'testing' ? '正在联调...' : '测试语音 连通性'}
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">模型型号 (MODEL NAME)</label>
+                  <input type="text" value={modelName} onChange={e => setModelName(e.target.value)} placeholder="deepseek-chat" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <button onClick={handleTestConnection} disabled={connectionStatus === 'testing'} className="btn-cyber" style={{ width: '100%', height: '28px', fontSize: '11px', marginTop: '4px' }}>
+                  {connectionStatus === 'testing' ? '正在测试...' : '测试 LLM 连通性'}
                 </button>
-                {ttsConnectionStatus === 'success' && (
-                  <div className="connection-banner success" style={{ borderColor: 'rgba(56, 255, 112, 0.4)', color: '#8dffa5' }}>
-                    <Check style={{ width: '12px', height: '12px' }} />
-                    <span>联通成功 ({ttsConnectionLatency}ms)</span>
-                  </div>
-                )}
-                {ttsConnectionStatus === 'error' && (
-                  <div className="connection-banner error" title={ttsConnectionError}>
-                    <X style={{ width: '12px', height: '12px' }} />
-                    <span>失败</span>
-                  </div>
-                )}
+                {connectionStatus === 'success' && <div style={{ color: '#8dffa5', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✓ 连接成功 ({connectionLatency}ms)</div>}
+                {connectionStatus === 'error' && <div style={{ color: '#fda4af', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✗ 失败: {connectionError}</div>}
               </div>
-            </div>
 
+              {/* 2. 一键生图 T2I */}
+              <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.15)' }}>
+                <h4 className="settings-card-title" style={{ color: 'var(--secondary)' }}>
+                  <Image style={{ width: '13px', height: '13px' }} />
+                  <span>2. 画面渲染大模型 (T2I)</span>
+                </h4>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">生图 API KEY</label>
+                  <input type="password" value={imageApiKey} onChange={e => setImageApiKey(e.target.value)} placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">生图 API 网关</label>
+                  <input type="text" value={imageApiUrl} onChange={e => setImageApiUrl(e.target.value)} placeholder="https://api.siliconflow.cn/v1/images/generations" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">生图模型型号</label>
+                  <input type="text" value={imageModelName} onChange={e => setImageModelName(e.target.value)} placeholder="black-forest-labs/FLUX.1-schnell" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <button onClick={handleTestImageConnection} disabled={imageConnectionStatus === 'testing'} className="btn-cyber" style={{ width: '100%', height: '28px', fontSize: '11px', marginTop: '4px' }}>
+                  {imageConnectionStatus === 'testing' ? '正在测试...' : '测试生图 连通性'}
+                </button>
+                {imageConnectionStatus === 'success' && <div style={{ color: '#8dffa5', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✓ 连接成功 ({imageConnectionLatency}ms)</div>}
+                {imageConnectionStatus === 'error' && <div style={{ color: '#fda4af', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✗ 失败: {imageConnectionError}</div>}
+              </div>
+
+              {/* 3. 一键生视频 T2V */}
+              <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.15)' }}>
+                <h4 className="settings-card-title" style={{ color: '#ffb938' }}>
+                  <Tv style={{ width: '13px', height: '13px' }} />
+                  <span>3. 一键生视频大模型 (T2V)</span>
+                </h4>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">生视频 API KEY</label>
+                  <input type="password" value={videoApiKey} onChange={e => setVideoApiKey(e.target.value)} placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">生视频 API 网关</label>
+                  <input type="text" value={videoApiUrl} onChange={e => setVideoApiUrl(e.target.value)} placeholder="https://api.siliconflow.cn/v1/video/generations" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">生视频模型型号</label>
+                  <input type="text" value={videoModelName} onChange={e => setVideoModelName(e.target.value)} placeholder="luma/aperture-1.0" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <button onClick={handleTestVideoConnection} disabled={videoConnectionStatus === 'testing'} className="btn-cyber" style={{ width: '100%', height: '28px', fontSize: '11px', marginTop: '4px' }}>
+                  {videoConnectionStatus === 'testing' ? '正在测试...' : '测试视频 连通性'}
+                </button>
+                {videoConnectionStatus === 'success' && <div style={{ color: '#8dffa5', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✓ 连接成功 ({videoConnectionLatency}ms)</div>}
+                {videoConnectionStatus === 'error' && <div style={{ color: '#fda4af', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✗ 失败: {videoConnectionError}</div>}
+              </div>
+
+              {/* 4. 语音合成大模型 TTS */}
+              <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(0,0,0,0.15)' }}>
+                <h4 className="settings-card-title" style={{ color: '#38ff70' }}>
+                  <Volume2 style={{ width: '13px', height: '13px' }} />
+                  <span>4. 语音合成大模型 (TTS)</span>
+                </h4>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">语音 API KEY</label>
+                  <input type="password" value={ttsApiKey} onChange={e => setTtsApiKey(e.target.value)} placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">语音 API 网关</label>
+                  <input type="text" value={ttsApiUrl} onChange={e => setTtsApiUrl(e.target.value)} placeholder="https://api.siliconflow.cn/v1/audio/speech" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="label-tech">语音模型型号</label>
+                  <input type="text" value={ttsModelName} onChange={e => setTtsModelName(e.target.value)} placeholder="FunAudioLLM/CosyVoice2-0.5B" className="input-tech" style={{ height: '32px' }} />
+                </div>
+                <button onClick={handleTestTtsConnection} disabled={ttsConnectionStatus === 'testing'} className="btn-cyber" style={{ width: '100%', height: '28px', fontSize: '11px', marginTop: '4px' }}>
+                  {ttsConnectionStatus === 'testing' ? '正在测试...' : '测试语音 连通性'}
+                </button>
+                {ttsConnectionStatus === 'success' && <div style={{ color: '#8dffa5', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✓ 连接成功 ({ttsConnectionLatency}ms)</div>}
+                {ttsConnectionStatus === 'error' && <div style={{ color: '#fda4af', fontSize: '10px', marginTop: '6px', textAlign: 'center' }}>✗ 失败: {ttsConnectionError}</div>}
+              </div>
+
+            </div>
           </div>
         </div>
-      )}
 
       {/* 主工作区 */}
       <main className={scenes.length === 0 ? "wizard-dashboard-layout" : "dashboard-grid"}>
@@ -1517,185 +1678,146 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 角色演员档案舱 (Cast Profile Manager) */}
-              <div className="glass-card" style={{ padding: '16px' }}>
-                <div 
-                  onClick={() => setShowCastPanel(!showCastPanel)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <User style={{ width: '15px', height: '15px', color: 'var(--accent)' }} />
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      角色演员档案舱
-                    </span>
-                    <span className="badge-cyber badge-cyber-gold" style={{ fontSize: '9px' }}>
-                      {characters.length} 角色
-                    </span>
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', transition: 'transform 0.2s', transform: showCastPanel ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-                </div>
-
-                {showCastPanel && (
-                  <div className="cast-panel-body" style={{ marginTop: '12px' }}>
-                    {characters.map((char) => (
-                      <div key={char.id} className="cast-card-vertical" style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '10px' }}>
-                        {/* Header: Name, Type, and Delete */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <input
-                              className="cast-name-input"
-                              value={char.name}
-                              onChange={(e) => handleUpdateCharacter(char.id, { name: e.target.value })}
-                              style={{ width: '80px' }}
-                            />
-                            <span className="badge-cyber badge-cyber-gold" style={{ fontSize: '8px', padding: '1px 5px' }}>{char.role_type}</span>
-                          </div>
-                          <button
-                            className="btn-cyber-tag danger"
-                            onClick={() => handleDeleteCharacter(char.id)}
-                            style={{ padding: '3px 6px', fontSize: '9px', borderRadius: '4px', cursor: 'pointer', background: 'rgba(225, 29, 72, 0.1)', border: '1px solid rgba(225, 29, 72, 0.3)', color: '#fda4af' }}
-                            title="删除角色"
-                          >
-                            <Trash2 style={{ width: '10px', height: '10px' }} />
-                          </button>
-                        </div>
-
-                        {/* Description */}
-                        <textarea
-                          className="cast-appearance-input"
-                          value={char.appearance_prompt || ''}
-                          placeholder="特征描述：发型、服饰、脸部特征（生成分镜图时将自动注入）"
-                          onChange={(e) => handleUpdateCharacter(char.id, { appearance_prompt: e.target.value })}
-                          style={{ minHeight: '38px', resize: 'vertical', width: '100%', fontSize: '10px', background: 'rgba(0,0,0,0.3)', color: '#ccc', borderRadius: '6px', padding: '4px 6px', border: '1px solid rgba(255,255,255,0.05)', lineHeight: '1.4' }}
-                        />
-
-                        {/* Visual Slots: Avatar, Turnaround, Pose */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginTop: '4px' }}>
-                          
-                          {/* Slot 1: Avatar */}
-                          <div className="cast-slot-box" onClick={() => {
-                            if (char.avatar_url) {
-                              setPreviewImageUrl(char.avatar_url);
-                            } else {
-                              handleGenerateAvatar(char.id, char.appearance_prompt);
-                            }
-                          }}>
-                            <div className="cast-slot-preview">
-                              {char.avatar_url ? (
-                                <img src={char.avatar_url} alt="头像" className="cast-slot-img" />
-                              ) : (
-                                <div className="cast-slot-placeholder">
-                                  <User style={{ width: '14px', height: '14px' }} />
-                                </div>
-                              )}
-                              {generatingAvatarId === char.id && (
-                                <div className="cast-slot-loading">
-                                  <RefreshCw className="animate-spin" style={{ width: '11px', height: '11px', color: 'var(--accent)' }} />
-                                </div>
-                              )}
-                              <div className="cast-slot-overlay" onClick={(e) => {
-                                e.stopPropagation();
-                                handleGenerateAvatar(char.id, char.appearance_prompt);
-                              }} title={char.avatar_url ? "重新定妆" : "一键定妆"}>
-                                <Sparkles style={{ width: '9px', height: '9px' }} />
-                              </div>
-                            </div>
-                            <span className="cast-slot-label">定妆头像</span>
-                          </div>
-
-                          {/* Slot 2: Turnaround */}
-                          <div className="cast-slot-box" onClick={() => {
-                            if (char.turnaround_url) {
-                              setPreviewImageUrl(char.turnaround_url);
-                            } else {
-                              handleGenerateTurnaround(char.id, char.appearance_prompt);
-                            }
-                          }}>
-                            <div className="cast-slot-preview">
-                              {char.turnaround_url ? (
-                                <img src={char.turnaround_url} alt="三视图" className="cast-slot-img" />
-                              ) : (
-                                <div className="cast-slot-placeholder">
-                                  <Layers style={{ width: '14px', height: '14px' }} />
-                                </div>
-                              )}
-                              {generatingTurnaroundId === char.id && (
-                                <div className="cast-slot-loading">
-                                  <RefreshCw className="animate-spin" style={{ width: '11px', height: '11px', color: 'var(--accent)' }} />
-                                </div>
-                              )}
-                              <div className="cast-slot-overlay" onClick={(e) => {
-                                e.stopPropagation();
-                                handleGenerateTurnaround(char.id, char.appearance_prompt);
-                              }} title={char.turnaround_url ? "重新生成三视图" : "生成三视图"}>
-                                <Sparkles style={{ width: '9px', height: '9px' }} />
-                              </div>
-                            </div>
-                            <span className="cast-slot-label">角色三视图</span>
-                          </div>
-
-                          {/* Slot 3: Pose */}
-                          <div className="cast-slot-box" onClick={() => {
-                            if (char.pose_url) {
-                              setPreviewImageUrl(char.pose_url);
-                            } else {
-                              handleGeneratePose(char.id, char.appearance_prompt);
-                            }
-                          }}>
-                            <div className="cast-slot-preview">
-                              {char.pose_url ? (
-                                <img src={char.pose_url} alt="动作姿态" className="cast-slot-img" />
-                              ) : (
-                                <div className="cast-slot-placeholder">
-                                  <Activity style={{ width: '14px', height: '14px' }} />
-                                </div>
-                              )}
-                              {generatingPoseId === char.id && (
-                                <div className="cast-slot-loading">
-                                  <RefreshCw className="animate-spin" style={{ width: '11px', height: '11px', color: 'var(--accent)' }} />
-                                </div>
-                              )}
-                              <div className="cast-slot-overlay" onClick={(e) => {
-                                e.stopPropagation();
-                                handleGeneratePose(char.id, char.appearance_prompt);
-                              }} title={char.pose_url ? "重新生成姿态图" : "生成姿态图"}>
-                                <Sparkles style={{ width: '9px', height: '9px' }} />
-                              </div>
-                            </div>
-                            <span className="cast-slot-label">姿态/战斗</span>
-                          </div>
-
-                        </div>
-                      </div>
-                    ))}
-                    <button className="btn-cast-add" onClick={handleAddCharacter}>
-                      <User style={{ width: '13px', height: '13px' }} />
-                      + 添加新角色档案
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* 智脑运行状态卡片 */}
-              <div className="status-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div className="status-dot-label">
-                    <div className={`status-dot ${(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? 'yellow' : 'green'}`}></div>
-                    <span>剧本解析智脑</span>
-                  </div>
-                  <div className={`status-card-value ${(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? 'yellow' : 'green'}`}>
-                    {(!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') ? '演示模式' : 'DeepSeek 联通'}
-                  </div>
+              
+              {/* 素材指引 (Asset Cosmos Panel) */}
+              <div className="asset-cosmos-panel" style={{ marginTop: '10px' }}>
+                <div className="sidebar-section-title">
+                  <User style={{ width: '13px', height: '13px', color: 'var(--accent)' }} />
+                  <span>素材资产宇宙 (Assets Cosmos)</span>
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '8px' }}>
-                  <div className="status-dot-label">
-                    <div className={`status-dot ${(!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') ? 'yellow' : 'green'}`}></div>
-                    <span>分镜智能渲染</span>
+                <div className="asset-cosmos-header">
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>🎭 演员角色 ({characters.length})</span>
+                  <button type="button" className="btn-cosmos-add" onClick={handleAddCharacter}>+ 角色</button>
+                </div>
+                <div className="cosmos-list">
+                  {characters.map(char => (
+                    <div key={char.id} className="cosmos-item" onClick={() => setActiveAssetModal({ type: 'char', id: char.id })}>
+                      <span className="cosmos-item-name">
+                        {char.avatar_url ? (
+                          <img src={char.avatar_url} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : '👤'}
+                        <span>{char.name}</span>
+                      </span>
+                      <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)' }}>{char.role_type} ›</span>
+                    </div>
+                  ))}
+                  {characters.length === 0 && (
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', textAlign: 'center', padding: '6px' }}>暂无角色，点击加号添加</span>
+                  )}
+                </div>
+
+                <div className="asset-cosmos-header" style={{ marginTop: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>🏞️ 空间场景 ({sceneryList.length})</span>
+                  <button type="button" className="btn-cosmos-add" onClick={handleAddScenery}>+ 场景</button>
+                </div>
+                <div className="cosmos-list">
+                  {sceneryList.map(scen => (
+                    <div key={scen.id} className="cosmos-item" onClick={() => setActiveAssetModal({ type: 'scenery', id: scen.id })}>
+                      <span className="cosmos-item-name">
+                        {scen.image_url ? (
+                          <img src={scen.image_url} alt="" style={{ width: '14px', height: '14px', borderRadius: '4px', objectFit: 'cover' }} />
+                        ) : '🏞️'}
+                        <span>{scen.name}</span>
+                      </span>
+                      <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)' }}>详情 ›</span>
+                    </div>
+                  ))}
+                  {sceneryList.length === 0 && (
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', textAlign: 'center', padding: '6px' }}>暂无场景，点击加号添加</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 后期音轨与专业打包舱 */}
+              <div className="sidebar-audio-suite" style={{ marginTop: '10px' }}>
+                <div className="sidebar-section-title">
+                  <Music style={{ width: '13px', height: '13px', color: 'var(--primary)' }} />
+                  <span>全局背景音乐配置 (BGM)</span>
+                </div>
+                <select
+                  className="input-tech select-tech-bgm"
+                  value={bgmPreset || 'none'}
+                  onChange={(e) => handleSelectBgmPreset(e.target.value)}
+                  style={{ height: '30px', fontSize: '11px', padding: '4px', background: '#090a0f', color: '#fff', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  <option value="none">🎵 无背景音乐 (仅配音对白)</option>
+                  <option value="epic_martial">🥋 热血修仙 · 仙侠战歌</option>
+                  <option value="mystic_forest">🌳 幻境之森 · 玄幻轻柔</option>
+                  <option value="dark_dungeon">💀 深渊冥火 · 霸气暗黑</option>
+                  <option value="cyber_punk">⚡ 赛博修仙 · 重低音摇滚</option>
+                </select>
+                
+                <div style={{ display: 'flex', alignItems: 'center', justifycontent: 'space-between', gap: '8px' }}>
+                  <label htmlFor="sidebar-bgm-upload" className="btn-cosmos-add" style={{ textAlign: 'center', flex: 1, padding: '4px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <Upload style={{ width: '10px', height: '10px' }} />
+                    <span>自定义 BGM</span>
+                  </label>
+                  <input
+                    id="sidebar-bgm-upload"
+                    type="file"
+                    accept="audio/mp3"
+                    style={{ display: 'none' }}
+                    onChange={handleUploadBgm}
+                  />
+                  {bgmCustomUrl && <span style={{ fontSize: '10px', color: '#8dffa5' }}>已加载 🔊</span>}
+                </div>
+
+                <div className="sidebar-section-title" style={{ marginTop: '4px' }}>
+                  <Volume2 style={{ width: '13px', height: '13px', color: 'var(--accent)' }} />
+                  <span>AI 角色台词一键配音 (TTS)</span>
+                </div>
+
+                {synthesizingAll ? (
+                  <div className="synth-all-progress-panel" style={{ background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '4px' }}>
+                      <span>正在配音...</span>
+                      <span style={{ fontWeight: 'bold' }}>{synthesizeProgress}%</span>
+                    </div>
+                    <div className="synth-progress-track-large" style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div className="synth-progress-bar-large" style={{ width: `${synthesizeProgress}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.15s ease' }}></div>
+                    </div>
                   </div>
-                  <div className={`status-card-value ${(!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') ? 'yellow' : 'green'}`}>
-                    {(!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') ? '演示模式' : 'SiliconFlow 联通'}
-                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-cyber"
+                    onClick={handleBatchSynthesizeTTS}
+                    style={{ width: '100%', height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <Volume2 style={{ width: '12px', height: '12px' }} />
+                    <span>一键批量合成所有台词</span>
+                  </button>
+                )}
+
+                <div className="sidebar-section-title" style={{ marginTop: '4px' }}>
+                  <Tv style={{ width: '13px', height: '13px', color: '#ffb938' }} />
+                  <span>剪映专业版打包导出</span>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-export-cyan"
+                  onClick={handleExportJianyingDraft}
+                  disabled={exportingJianying}
+                  style={{ width: '100%', height: '34px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(0, 242, 254, 0.3)', color: '#00f2fe', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  {exportingJianying ? (
+                    <>
+                      <RefreshCw className="animate-spin" style={{ width: '14px', height: '14px' }} />
+                      <span>正在打包...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap style={{ width: '14px', height: '14px', color: '#ffb938' }} />
+                      <span>打包导出剪映草稿工程</span>
+                    </>
+                  )}
+                </button>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '2px' }}>
+                  <button type="button" onClick={handleExportSRT} className="btn-cosmos-add" style={{ padding: '4px 0', fontSize: '10px' }}>字幕轨 (.srt)</button>
+                  <button type="button" onClick={handleDownloadJSON} className="btn-cosmos-add" style={{ padding: '4px 0', fontSize: '10px' }}>备份工程 (.json)</button>
                 </div>
               </div>
             </aside>
@@ -1777,75 +1899,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          {/* Global Style Hub Panel */}
-          {currentStoryboard && (
-            <div className="style-hub-panel">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Palette style={{ width: '15px', height: '15px', color: 'var(--primary)' }} />
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  全局风格引擎
-                </span>
-                <span className="badge-cyber badge-cyber-blue" style={{ fontSize: '8px' }}>STYLE HUB</span>
-              </div>
-              <div className="style-hub-row">
-                {/* Style Presets */}
-                <div className="style-hub-section">
-                  <span className="detail-label-tech">风格预设</span>
-                  <div className="style-preset-grid">
-                    {STYLE_PRESETS.map((preset) => (
-                      <button
-                        key={preset.value}
-                        className={`style-preset-chip ${stylePreset === preset.value ? 'active' : ''}`}
-                        onClick={() => { setStylePreset(preset.value); handleSaveStyleSettings(); }}
-                        title={preset.desc}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Seed Lock */}
-                <div className="style-hub-section seed-section">
-                  <span className="detail-label-tech">种子锁定</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <input
-                      type="number"
-                      className="seed-input"
-                      value={masterSeed}
-                      onChange={(e) => setMasterSeed(parseInt(e.target.value) || -1)}
-                      disabled={seedLocked}
-                    />
-                    <button
-                      className={`btn-seed-lock ${seedLocked ? 'locked' : ''}`}
-                      onClick={() => { setSeedLocked(!seedLocked); handleSaveStyleSettings(); }}
-                      title={seedLocked ? '解锁种子' : '锁定种子'}
-                    >
-                      {seedLocked ? <Lock style={{ width: '12px', height: '12px' }} /> : <Unlock style={{ width: '12px', height: '12px' }} />}
-                      <div className={`seed-status-dot ${seedLocked ? 'active' : ''}`}></div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Style Reference URL */}
-                <div className="style-hub-section">
-                  <span className="detail-label-tech">风格参考图 (SREF)</span>
-                  <div className="sref-upload-zone">
-                    <input
-                      type="text"
-                      className="seed-input"
-                      style={{ width: '100%' }}
-                      value={styleRefUrl}
-                      onChange={(e) => setStyleRefUrl(e.target.value)}
-                      onBlur={handleSaveStyleSettings}
-                      placeholder="粘贴风格参考图 URL..."
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* 加载中状态 */}
           {loading && (
@@ -2019,49 +2072,76 @@ export default function App() {
                           <div className="corner-br" style={{ zIndex: 3 }}></div>
                         </div>
 
-                        <div className="scene-meta-badges" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <div className="scene-meta-badges" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
+                          {/* 角色定妆微型徽章 */}
                           {scene.character_ids ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                              {scene.character_ids.split(',').map(cid => {
-                                const char = characters.find(c => c.id === parseInt(cid, 10));
-                                if (!char) return null;
-                                return (
-                                  <div 
-                                    key={char.id} 
-                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', color: '#fff', cursor: 'help' }}
-                                    title={`${char.name} (${char.role_type}): ${char.appearance_prompt || '暂无描述'}`}
-                                  >
-                                    {char.avatar_url ? (
-                                      <img src={char.avatar_url} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
-                                    ) : (
-                                      <User style={{ width: '8px', height: '8px', color: 'var(--accent)' }} />
-                                    )}
-                                    <span>{char.name}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                            scene.character_ids.split(',').map(cid => {
+                              const char = characters.find(c => c.id === parseInt(cid, 10));
+                              if (!char) return null;
+                              return (
+                                <div 
+                                  key={char.id} 
+                                  onClick={() => setActiveAssetModal({ type: 'char', id: char.id })}
+                                  className="mini-badge-interactive"
+                                  title={`点击打开【${char.name}】定妆舱三视图与全身姿态管理`}
+                                >
+                                  {char.avatar_url ? (
+                                    <img src={char.avatar_url} alt="" style={{ width: '12px', height: '12px', borderRadius: '50%', objectFit: 'cover' }} />
+                                  ) : '👤'}
+                                  <span>{char.name}</span>
+                                </div>
+                              );
+                            })
                           ) : (
-                            scene.character_on_screen && scene.character_on_screen !== '无' && (
-                              <span className="badge-cyber badge-cyber-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
-                                👤 {scene.character_on_screen}
-                              </span>
-                            )
+                            <div 
+                              onClick={() => handleEditClick(scene)}
+                              className="mini-badge-interactive unlinked"
+                              title="暂无角色，点击在导剪工坊绑定"
+                            >
+                              👤 未绑定演员
+                            </div>
                           )}
-                          {/* 音色预览增强 */}
+
+                          {/* 空间场景原画徽章 */}
+                          {(() => {
+                            const scenery = sceneryList.find(s => s.id === scene.scenery_id);
+                            if (scenery) {
+                              return (
+                                <div 
+                                  onClick={() => setActiveAssetModal({ type: 'scenery', id: scenery.id })}
+                                  className="mini-badge-interactive scenery"
+                                  title={`点击打开【${scenery.name}】空间场景原画舱管理`}
+                                >
+                                  {scenery.image_url ? (
+                                    <img src={scenery.image_url} alt="" style={{ width: '12px', height: '12px', borderRadius: '2px', objectFit: 'cover' }} />
+                                  ) : '🏞️'}
+                                  <span>{scenery.name}</span>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div 
+                                  onClick={() => handleEditClick(scene)}
+                                  className="mini-badge-interactive unlinked"
+                                  title="未绑定空间舱，点击在导剪工坊中关联"
+                                >
+                                  🏞️ 未关联空间舱
+                                </div>
+                              );
+                            }
+                          })()}
+
+                          {/* 音色试听 */}
                           <span 
-                            onClick={() => playVoicePreview(scene.jianying_voice || '冷酷男神')}
-                            className="badge-cyber badge-cyber-purple" 
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', width: 'fit-content', cursor: 'pointer' }}
-                            title="点击试听该角色音色"
+                            onClick={() => playVoicePreview(scene.jianying_voice || '故事旁白')}
+                            className="mini-badge-interactive"
+                            style={{ background: 'rgba(185, 39, 252, 0.12)', borderColor: 'rgba(185, 39, 252, 0.3)' }}
+                            title="点击试听配音音色"
                           >
-                            <Volume2 style={{ width: '11px', height: '11px' }} />
-                            <span>{scene.jianying_voice || '冷酷男神'} 🔊</span>
+                            🎙️ {scene.jianying_voice || '故事旁白'} 🔊
                           </span>
                         </div>
                       </div>
-
-                      {/* 右侧：分镜镜头结构细节 */}
                       <div className="scene-card-right">
                         <div className="scene-detail-header">
                           <div className="visual-desc-box">
@@ -2071,38 +2151,26 @@ export default function App() {
                           <div>
                             <button 
                               onClick={() => handleEditClick(scene)}
-                              className="btn-action-small"
-                              title="微调镜头细节"
+                              className="btn-director-workshop-accent"
+                              title="微调运镜台词、绑定人物原景"
                             >
-                              <Edit style={{ width: '14px', height: '14px' }} />
+                              <Edit style={{ width: '13px', height: '13px' }} />
+                              <span>导剪工坊</span>
                             </button>
                           </div>
                         </div>
 
                         {/* 即梦中文提示词（高亮代码块） */}
-                        <div className="prompt-console">
-                          <div className="prompt-console-header">
-                            <span className="prompt-console-title">即梦AI (Jimeng AI) 中文提示词</span>
-                            <button 
-                              onClick={() => handleCopyPrompt(scene.jimeng_prompt, scene.id || scene.scene_number)}
-                              className={`btn-console-copy ${copiedSceneId === (scene.id || scene.scene_number) ? 'copied' : ''}`}
-                            >
-                              {copiedSceneId === (scene.id || scene.scene_number) ? (
-                                <>
-                                  <Check style={{ width: '12px', height: '12px' }} />
-                                  <span>已复制!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy style={{ width: '12px', height: '12px' }} />
-                                  <span>复制提示词</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                          <div className="prompt-console-body">
-                            {scene.jimeng_prompt}
-                          </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', fontSize: '11px', marginTop: '6px', marginBottom: '14px' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>即梦AI中文画面提示词</span>
+                          <button 
+                            type="button"
+                            onClick={() => handleCopyPrompt(scene.jimeng_prompt, scene.id || scene.scene_number)}
+                            className={`btn-cyber-tag ${copiedSceneId === (scene.id || scene.scene_number) ? 'active' : ''}`}
+                            style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
+                          >
+                            {copiedSceneId === (scene.id || scene.scene_number) ? '已复制 ✓' : '一键复制提示词 📋'}
+                          </button>
                         </div>
 
                         {/* 声音和对白 */}
@@ -2521,7 +2589,238 @@ export default function App() {
         </div>
       )}
 
-      {/* Lightbox Image Preview Modal */}
+      
+      {/* 资产定妆/精修空间舱 (Asset Refiner Cabin Modal) */}
+      {activeAssetModal && (
+        <div className="modal-overlay" onClick={() => setActiveAssetModal(null)} style={{ zIndex: 2999, background: 'rgba(3, 4, 8, 0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div 
+            className={`asset-refiner-modal ${activeAssetModal.type === 'scenery' ? 'scenery-type' : ''}`} 
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '540px', background: 'rgba(10, 12, 20, 0.92)', backdropFilter: 'blur(25px)', border: activeAssetModal.type === 'scenery' ? '1px solid rgba(0, 242, 254, 0.25)' : '1px solid rgba(99, 102, 241, 0.25)', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85)', borderRadius: '16px', padding: '20px' }}
+          >
+            <div className="asset-refiner-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <h3 className="asset-refiner-title" style={{ fontSize: '13px', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                {activeAssetModal.type === 'char' ? (
+                  <>
+                    <User style={{ width: '14px', height: '14px', color: 'var(--accent)' }} />
+                    <span>角色原画定妆舱 (Character Asset Cabin)</span>
+                  </>
+                ) : (
+                  <>
+                    <Layers style={{ width: '14px', height: '14px', color: '#00f2fe' }} />
+                    <span>空间场景原画舱 (Scenery Environment Cabin)</span>
+                  </>
+                )}
+              </h3>
+              <button 
+                onClick={() => setActiveAssetModal(null)} 
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <X style={{ width: '16px', height: '16px' }} />
+              </button>
+            </div>
+
+            <div className="asset-refiner-body">
+              {activeAssetModal.type === 'char' ? (() => {
+                const char = characters.find(c => c.id === activeAssetModal.id);
+                if (!char) return <p style={{ color: 'var(--text-muted)' }}>未找到该角色</p>;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
+                      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>角色姓名</label>
+                        <input 
+                          type="text" 
+                          value={char.name} 
+                          onChange={(e) => handleUpdateCharacter(char.id, { name: e.target.value })} 
+                          className="input-tech" 
+                          style={{ height: '30px', fontSize: '11px', marginBottom: '8px' }}
+                        />
+                        
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>角色定位</label>
+                        <select 
+                          value={char.role_type || '主角'} 
+                          onChange={(e) => handleUpdateCharacter(char.id, { role_type: e.target.value })} 
+                          className="input-tech"
+                          style={{ height: '30px', padding: '4px', fontSize: '11px', background: '#090a0f', color: '#fff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', marginBottom: '8px' }}
+                        >
+                          <option value="主角">🎭 主角 (Protagonist)</option>
+                          <option value="配角">👥 配角 (Supporting)</option>
+                          <option value="反派">💀 反派 (Antagonist)</option>
+                          <option value="旁白">🎙️ 旁白 (Narrator)</option>
+                        </select>
+
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>外观/服饰/容貌 Prompt</label>
+                        <textarea 
+                          rows={4}
+                          value={char.appearance_prompt || ''} 
+                          onChange={(e) => handleUpdateCharacter(char.id, { appearance_prompt: e.target.value })} 
+                          className="input-tech" 
+                          placeholder="描述发型、衣服、长相、特征，例如：黑色短发少年，穿着青色玄羽道袍，眼神坚定..."
+                          style={{ fontSize: '11px', resize: 'none', padding: '6px', minHeight: '80px' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px' }}>快速渲染指令</label>
+                        
+                        <button 
+                          onClick={() => handleGenerateAvatar(char.id, char.appearance_prompt)}
+                          disabled={generatingAvatarId === char.id}
+                          className="btn-cyber"
+                          style={{ width: '100%', height: '28px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          {generatingAvatarId === char.id ? '正在渲染...' : '👤 一键生成头像'}
+                        </button>
+                        
+                        <button 
+                          onClick={() => handleGenerateTurnaround(char.id, char.appearance_prompt)}
+                          disabled={generatingTurnaroundId === char.id}
+                          className="btn-cyber"
+                          style={{ width: '100%', height: '28px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          {generatingTurnaroundId === char.id ? '正在渲染...' : '📐 一键生成三视图'}
+                        </button>
+
+                        <button 
+                          onClick={() => handleGeneratePose(char.id, char.appearance_prompt)}
+                          disabled={generatingPoseId === char.id}
+                          className="btn-cyber"
+                          style={{ width: '100%', height: '28px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          {generatingPoseId === char.id ? '正在渲染...' : '🏃 一键全身姿态图'}
+                        </button>
+
+                        <button 
+                          onClick={() => handleDeleteCharacter(char.id)}
+                          className="btn-delete"
+                          style={{ width: '100%', height: '28px', fontSize: '10px', marginTop: 'auto', background: 'rgba(225, 29, 72, 0.12)', border: '1px solid rgba(225, 29, 72, 0.25)', color: '#fda4af', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          🗑️ 注销该角色
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="character-sheets-display" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '4px' }}>
+                      <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>渲染定妆照与参考表 (点击可放大)</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr', gap: '8px' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)', padding: '4px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '8px', color: 'var(--text-dim)', display: 'block', marginBottom: '2px' }}>角色头像</span>
+                          {char.avatar_url ? (
+                            <img 
+                              src={char.avatar_url} 
+                              alt="头像" 
+                              onClick={() => setPreviewImageUrl(char.avatar_url)}
+                              style={{ width: '100%', height: '64px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.06)', cursor: 'zoom-in' }} 
+                            />
+                          ) : (
+                            <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.05)', fontSize: '16px' }}>👤</div>
+                          )}
+                        </div>
+
+                        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)', padding: '4px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '8px', color: 'var(--text-dim)', display: 'block', marginBottom: '2px' }}>三视图 (Turnaround)</span>
+                          {char.turnaround_url ? (
+                            <img 
+                              src={char.turnaround_url} 
+                              alt="三视图" 
+                              onClick={() => setPreviewImageUrl(char.turnaround_url)}
+                              style={{ width: '100%', height: '64px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.06)', cursor: 'zoom-in' }} 
+                            />
+                          ) : (
+                            <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.05)', fontSize: '16px' }}>📐</div>
+                          )}
+                        </div>
+
+                        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)', padding: '4px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '8px', color: 'var(--text-dim)', display: 'block', marginBottom: '2px' }}>姿态参考 (Pose)</span>
+                          {char.pose_url ? (
+                            <img 
+                              src={char.pose_url} 
+                              alt="姿态" 
+                              onClick={() => setPreviewImageUrl(char.pose_url)}
+                              style={{ width: '100%', height: '64px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.06)', cursor: 'zoom-in' }} 
+                            />
+                          ) : (
+                            <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.05)', fontSize: '16px' }}>🏃</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })() : (() => {
+                const scen = sceneryList.find(s => s.id === activeAssetModal.id);
+                if (!scen) return <p style={{ color: 'var(--text-muted)' }}>未找到该场景空间</p>;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
+                      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>场景空间名称</label>
+                        <input 
+                          type="text" 
+                          value={scen.name} 
+                          onChange={(e) => handleUpdateScenery(scen.id, { name: e.target.value })} 
+                          className="input-tech" 
+                          style={{ height: '30px', fontSize: '11px', marginBottom: '8px' }}
+                        />
+
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>场景空间环境 Prompt</label>
+                        <textarea 
+                          rows={6}
+                          value={scen.environment_prompt || ''} 
+                          onChange={(e) => handleUpdateScenery(scen.id, { environment_prompt: e.target.value })} 
+                          className="input-tech" 
+                          placeholder="描述场景的氛围、天气、灯光、摆设，例如：宏伟古老的修仙大殿，青石铺地，两旁耸立着神龙雕像石柱，远处有一座散发金光的王座，雾气缭绕，庄严肃穆..."
+                          style={{ fontSize: '11px', resize: 'none', padding: '6px', minHeight: '100px' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label className="label-tech" style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px' }}>场景原画管理</label>
+                        
+                        <button 
+                          onClick={() => handleGenerateSceneryImage(scen.id, scen.environment_prompt)}
+                          disabled={generatingSceneryId === scen.id}
+                          className="btn-cyber"
+                          style={{ width: '100%', height: '28px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', borderColor: 'rgba(0,242,254,0.3)', color: '#00f2fe' }}
+                        >
+                          {generatingSceneryId === scen.id ? '正在绘制...' : '🏞️ 渲染场景参考图'}
+                        </button>
+
+                        <button 
+                          onClick={() => handleDeleteScenery(scen.id)}
+                          className="btn-delete"
+                          style={{ width: '100%', height: '28px', fontSize: '10px', marginTop: 'auto', background: 'rgba(225, 29, 72, 0.12)', border: '1px solid rgba(225, 29, 72, 0.25)', color: '#fda4af', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          🗑️ 注销该空间场景
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '4px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>场景空间视觉建立参考原画 (点击可放大)</span>
+                      {scen.image_url ? (
+                        <div style={{ position: 'relative', width: '100%', height: '150px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                          <img 
+                            src={scen.image_url} 
+                            alt="场景图" 
+                            onClick={() => setPreviewImageUrl(scen.image_url)}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} 
+                          />
+                        </div>
+                      ) : (
+                        <div style={{ height: '120px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px dashed rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.05)', fontSize: '18px' }}>🏞️ 暂无参考原画</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+  {/* Lightbox Image Preview Modal */}
       {previewImageUrl && (
         <div className="modal-overlay" onClick={() => setPreviewImageUrl(null)} style={{ zIndex: 9999, background: 'rgba(3, 4, 8, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '85vw', width: 'auto', background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>

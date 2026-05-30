@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const { initDatabase, run, all, get } = require('./database');
 
 const app = express();
@@ -7,6 +9,21 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Ensure public upload directories exist
+const publicDir = path.join(__dirname, 'public');
+const uploadsDir = path.join(publicDir, 'uploads');
+const bgmDir = path.join(uploadsDir, 'bgm');
+const audioDir = path.join(uploadsDir, 'audio');
+
+[publicDir, uploadsDir, bgmDir, audioDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// Serve static assets
+app.use('/public', express.static(publicDir));
 
 // 模拟的高燃修仙绑定系统数据，用于无Key演示模式
 const SIMULATED_RESPONSE = {
@@ -315,14 +332,22 @@ app.get('/api/storyboard/:id', async (req, res) => {
 // 4. 更新特定分镜（保存用户的二次微调修改）
 app.put('/api/storyboard/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, novel_text, scenes } = req.body;
+  const { title, novel_text, scenes, bgm_preset, bgm_custom_url } = req.body;
 
   try {
-    // 更新主表
-    if (title || novel_text) {
+    // 动态更新主表
+    const updateFields = [];
+    const updateParams = [];
+    if (title !== undefined) { updateFields.push("title = ?"); updateParams.push(title); }
+    if (novel_text !== undefined) { updateFields.push("novel_text = ?"); updateParams.push(novel_text); }
+    if (bgm_preset !== undefined) { updateFields.push("bgm_preset = ?"); updateParams.push(bgm_preset); }
+    if (bgm_custom_url !== undefined) { updateFields.push("bgm_custom_url = ?"); updateParams.push(bgm_custom_url); }
+    
+    if (updateFields.length > 0) {
+      updateParams.push(id);
       await run(
-        `UPDATE storyboards SET title = COALESCE(?, title), novel_text = COALESCE(?, novel_text) WHERE id = ?`,
-        [title, novel_text, id]
+        `UPDATE storyboards SET ${updateFields.join(', ')} WHERE id = ?`,
+        updateParams
       );
     }
 
@@ -331,8 +356,8 @@ app.put('/api/storyboard/:id', async (req, res) => {
       await run(`DELETE FROM scenes WHERE storyboard_id = ?`, [id]);
       for (const scene of scenes) {
         await run(
-          `INSERT INTO scenes (storyboard_id, scene_number, camera_direction, visual_description, character_on_screen, jimeng_prompt, dialogue, sound_effects, jianying_voice, image_url, video_url, character_ids)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO scenes (storyboard_id, scene_number, camera_direction, visual_description, character_on_screen, jimeng_prompt, dialogue, sound_effects, jianying_voice, image_url, video_url, character_ids, scenery_id, audio_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             scene.scene_number,
@@ -345,7 +370,9 @@ app.put('/api/storyboard/:id', async (req, res) => {
             scene.jianying_voice,
             scene.image_url || null,
             scene.video_url || null,
-            scene.character_ids || null
+            scene.character_ids || null,
+            scene.scenery_id || null,
+            scene.audio_url || null
           ]
         );
       }
@@ -418,19 +445,29 @@ app.post('/api/scene/generate-image', async (req, res) => {
           }
         }
 
-        // 角色一致性注入：读取分镜关联的角色特征词并高权重前置注入
-        const scene = await get(`SELECT character_ids FROM scenes WHERE id = ?`, [scene_id]);
-        if (scene && scene.character_ids) {
-          const charIds = scene.character_ids.split(',').map(id => id.trim()).filter(Boolean);
-          let charDescriptions = [];
-          for (const cid of charIds) {
-            const char = await get(`SELECT name, appearance_prompt FROM characters WHERE id = ?`, [cid]);
-            if (char && char.appearance_prompt) {
-              charDescriptions.push(`出镜人物 ${char.name}（特征为：${char.appearance_prompt}）`);
+        // 空间与角色一致性注入：读取分镜关联的场景设定与角色特征并高权重前置注入
+        const sceneData = await get(`SELECT character_ids, scenery_id FROM scenes WHERE id = ?`, [scene_id]);
+        if (sceneData) {
+          // 1. 场景背景环境前置注入
+          if (sceneData.scenery_id) {
+            const scen = await get(`SELECT name, environment_prompt FROM scenery WHERE id = ?`, [sceneData.scenery_id]);
+            if (scen && scen.environment_prompt) {
+              enhancedPrompt = `场景环境设定在${scen.name}（背景特征为：${scen.environment_prompt}），` + enhancedPrompt;
             }
           }
-          if (charDescriptions.length > 0) {
-            enhancedPrompt = charDescriptions.join(', ') + ', ' + enhancedPrompt;
+          // 2. 出镜角色外貌前置注入
+          if (sceneData.character_ids) {
+            const charIds = sceneData.character_ids.split(',').map(id => id.trim()).filter(Boolean);
+            let charDescriptions = [];
+            for (const cid of charIds) {
+              const char = await get(`SELECT name, appearance_prompt FROM characters WHERE id = ?`, [cid]);
+              if (char && char.appearance_prompt) {
+                charDescriptions.push(`出镜人物 ${char.name}（特征为：${char.appearance_prompt}）`);
+              }
+            }
+            if (charDescriptions.length > 0) {
+              enhancedPrompt = charDescriptions.join(', ') + ', ' + enhancedPrompt;
+            }
           }
         }
       }
@@ -557,9 +594,9 @@ app.post('/api/scene/generate-video', async (req, res) => {
   }
 });
 
-// 8. 智能分镜语音大模型合成接口 (New Text-to-Speech Feature)
+// 8. 智能分镜语音大模型合成接口 (New Text-to-Speech Feature with persistent saving)
 app.post('/api/scene/generate-tts', async (req, res) => {
-  const { voice_name, text, tts_api_key, tts_api_url, tts_model_name } = req.body;
+  const { voice_name, text, scene_id, tts_api_key, tts_api_url, tts_model_name } = req.body;
 
   if (!text) {
     return res.status(400).json({ error: '合成台词不能为空' });
@@ -567,9 +604,29 @@ app.post('/api/scene/generate-tts', async (req, res) => {
 
   const isDemo = !tts_api_key || tts_api_key === 'YOUR_TTS_KEY_HERE' || tts_api_key.trim() === '';
 
+  // 1-second silent MP3 base64 placeholder for Demo Mode
+  const SILENT_MP3_BASE64 = "SUQzBAAAAAAAAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXAzdgBUWFhYAAAAEgAAA21pbm9yX3ZlcnNpb24AMABUWFhYAAAAHAAAA2NvbXBhdGlibGVfYnJhbmRzAG1wM3Zpc29tAFRFTkMAAAAQAAADTGF2Zi11dGlscwBlbWJUAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAA";
+
   if (isDemo) {
-    // 模拟语音大模型接口延迟，如果没配置，前端继续用 window.speechSynthesis
-    return res.json({ success: false, mode: 'local', message: '未配置大模型KEY，将自动降级使用浏览器原生的分发语音播放' });
+    let publicUrl = null;
+    if (scene_id) {
+      try {
+        const filename = `scene_${scene_id}.mp3`;
+        const filePath = path.join(audioDir, filename);
+        fs.writeFileSync(filePath, Buffer.from(SILENT_MP3_BASE64, 'base64'));
+        publicUrl = `/public/uploads/audio/${filename}`;
+        await run(`UPDATE scenes SET audio_url = ? WHERE id = ?`, [publicUrl, scene_id]);
+      } catch (err) {
+        console.error("Demo 模式下保存音频失败:", err);
+      }
+    }
+    return res.json({ 
+      success: true, 
+      mode: 'local', 
+      audio_base64: SILENT_MP3_BASE64,
+      audio_url: publicUrl,
+      message: '未配置大模型KEY，将自动降级使用浏览器原生的分发语音播放' 
+    });
   }
 
   // 映射大模型配音角色音色
@@ -626,16 +683,484 @@ app.post('/api/scene/generate-tts', async (req, res) => {
     }
 
     const buffer = await response.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
+    const nodeBuffer = Buffer.from(buffer);
+    const base64 = nodeBuffer.toString('base64');
     
+    let publicUrl = null;
+    if (scene_id) {
+      const filename = `scene_${scene_id}.mp3`;
+      const filePath = path.join(audioDir, filename);
+      fs.writeFileSync(filePath, nodeBuffer);
+      publicUrl = `/public/uploads/audio/${filename}`;
+      await run(`UPDATE scenes SET audio_url = ? WHERE id = ?`, [publicUrl, scene_id]);
+    }
+
     res.json({ 
       success: true, 
       mode: 'online', 
-      audio_base64: base64 
+      audio_base64: base64,
+      audio_url: publicUrl
     });
   } catch (err) {
     console.error("真实语音合成调用出错:", err);
     res.status(500).json({ error: '语音大模型生成失败: ' + err.message });
+  }
+});
+
+// 8.1 自定义全局 BGM 上传接口
+app.post('/api/storyboard/:id/upload-bgm', async (req, res) => {
+  const { id } = req.params;
+  const { audio_base64, filename } = req.body;
+
+  if (!audio_base64) {
+    return res.status(400).json({ error: '音频 base64 内容不能为空' });
+  }
+
+  try {
+    const ext = path.extname(filename || 'bgm.mp3') || '.mp3';
+    const cleanFilename = `bgm_${id}_${Date.now()}${ext}`;
+    const filePath = path.join(bgmDir, cleanFilename);
+    
+    // Save buffer
+    const buffer = Buffer.from(audio_base64, 'base64');
+    fs.writeFileSync(filePath, buffer);
+
+    const publicUrl = `/public/uploads/bgm/${cleanFilename}`;
+    
+    // Update storyboard
+    await run(`UPDATE storyboards SET bgm_custom_url = ?, bgm_preset = NULL WHERE id = ?`, [publicUrl, id]);
+
+    res.json({ success: true, bgm_custom_url: publicUrl });
+  } catch (err) {
+    console.error("上传 BGM 出错:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8.2 一键导出剪映草稿工程接口
+app.post('/api/storyboard/:id/export-jianying', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const storyboard = await get(`SELECT * FROM storyboards WHERE id = ?`, [id]);
+    if (!storyboard) {
+      return res.status(404).json({ error: '未找到该分镜剧本' });
+    }
+    const scenes = await all(`SELECT * FROM scenes WHERE storyboard_id = ? ORDER BY scene_number ASC`, [id]);
+    if (!scenes || scenes.length === 0) {
+      return res.status(400).json({ error: '该分镜剧本没有任何镜头，无法导出' });
+    }
+
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    
+    // Create draft folder structures
+    const draftFolder = `AI_Comic_Storyboard_${id}`;
+    const assetsFolder = `${draftFolder}/assets`;
+    
+    const videoMaterials = [];
+    const audioMaterials = [];
+    const textMaterials = [];
+    
+    const videoSegments = [];
+    const audioSegments = [];
+    const textSegments = [];
+    
+    let cumulativeTime = 0;
+    
+    // Download helper for ZIP writing
+    const downloadToZip = async (url, zipPath) => {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          zip.addFile(zipPath, Buffer.from(buffer));
+          return true;
+        }
+      } catch (err) {
+        console.error(`Failed to download ${url} to zip ${zipPath}:`, err);
+      }
+      return false;
+    };
+    
+    // 1-second silent MP3 buffer to use as placeholder
+    const SILENT_MP3_BASE64 = "SUQzBAAAAAAAAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXAzdgBUWFhYAAAAEgAAA21pbm9yX3ZlcnNpb24AMABUWFhYAAAAHAAAA2NvbXBhdGlibGVfYnJhbmRzAG1wM3Zpc29tAFRFTkMAAAAQAAADTGF2Zi11dGlscwBlbWJUAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAAAD/AAAAA";
+    const silentBuffer = Buffer.from(SILENT_MP3_BASE64, 'base64');
+
+    // Default placeholder image (1x1 pixel grey png)
+    const GRAY_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const grayBuffer = Buffer.from(GRAY_PNG_BASE64, 'base64');
+
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
+      
+      // Calculate scene duration (microseconds)
+      const dialogueText = scene.dialogue || '';
+      let sceneDuration = Math.max(3000000, dialogueText.length * 250000 + 800000);
+      if (!dialogueText.trim()) {
+        sceneDuration = 4000000; // 4 seconds default
+      }
+      
+      // 1. Process Visual (Video or Image)
+      let hasVideo = !!scene.video_url;
+      let visualUrl = scene.video_url || scene.image_url;
+      const visualExt = hasVideo ? '.mp4' : '.png';
+      const visualFilename = `scene_${scene.scene_number}${visualExt}`;
+      const visualZipPath = `${assetsFolder}/${visualFilename}`;
+      
+      let visualLoaded = false;
+      if (visualUrl) {
+        if (visualUrl.startsWith('/public/')) {
+          const localPath = path.join(__dirname, visualUrl);
+          if (fs.existsSync(localPath)) {
+            zip.addFile(visualZipPath, fs.readFileSync(localPath));
+            visualLoaded = true;
+          }
+        } else if (visualUrl.startsWith('http')) {
+          visualLoaded = await downloadToZip(visualUrl, visualZipPath);
+        }
+      }
+      
+      // Fallback visual if loading fails
+      if (!visualLoaded) {
+        zip.addFile(visualZipPath, grayBuffer);
+      }
+      
+      // 2. Process Dialogue Audio
+      const audioFilename = `audio_${scene.scene_number}.mp3`;
+      const audioZipPath = `${assetsFolder}/${audioFilename}`;
+      let audioLoaded = false;
+      
+      if (scene.audio_url) {
+        if (scene.audio_url.startsWith('/public/')) {
+          const localPath = path.join(__dirname, scene.audio_url);
+          if (fs.existsSync(localPath)) {
+            zip.addFile(audioZipPath, fs.readFileSync(localPath));
+            audioLoaded = true;
+          }
+        } else if (scene.audio_url.startsWith('http')) {
+          audioLoaded = await downloadToZip(scene.audio_url, audioZipPath);
+        }
+      }
+      
+      // Fallback silent audio if missing
+      if (!audioLoaded) {
+        zip.addFile(audioZipPath, silentBuffer);
+      }
+      
+      // 3. Materials data maps
+      videoMaterials.push({
+        "category_id": "",
+        "category_name": "",
+        "duration": sceneDuration,
+        "extra_info": "",
+        "file_EndTime": 0,
+        "file_StartTime": 0,
+        "height": 1080,
+        "id": `material_video_${scene.id}`,
+        "import_time": Math.floor(Date.now() / 1000),
+        "import_time_ms": Date.now(),
+        "item_source": 1,
+        "local_id": "",
+        "local_material_id": "",
+        "material_name": visualFilename,
+        "material_status": 0,
+        "path": `assets/${visualFilename}`,
+        "type": hasVideo ? "video" : "photo",
+        "width": 1920
+      });
+      
+      audioMaterials.push({
+        "category_id": "",
+        "category_name": "",
+        "duration": sceneDuration,
+        "extra_info": "",
+        "file_EndTime": 0,
+        "file_StartTime": 0,
+        "id": `material_audio_${scene.id}`,
+        "import_time": Math.floor(Date.now() / 1000),
+        "import_time_ms": Date.now(),
+        "item_source": 1,
+        "local_id": "",
+        "local_material_id": "",
+        "material_name": audioFilename,
+        "material_status": 0,
+        "path": `assets/${audioFilename}`,
+        "type": "music"
+      });
+      
+      // CapCut Text Subtitle Material (uses double-escaped styles text JSON string)
+      textMaterials.push({
+        "align_type": 1,
+        "background_alpha": 1.0,
+        "background_color": "",
+        "background_height": 1.0,
+        "background_round_radius": 0.0,
+        "background_style": 0,
+        "background_width": 1.0,
+        "bold_width": 0.0,
+        "border_alpha": 1.0,
+        "border_color": "",
+        "border_width": 0.08,
+        "font_category_id": "",
+        "font_category_name": "",
+        "font_id": "",
+        "font_name": "",
+        "font_path": "",
+        "font_resource_id": "",
+        "font_size": 15.0,
+        "font_title": "System",
+        "force_apply_line_max_width": false,
+        "gloomy_alpha": 1.0,
+        "gloomy_color": "",
+        "gloomy_intensity": 0.12,
+        "has_shadow": true,
+        "id": `material_text_${scene.id}`,
+        "italic_degree": 0,
+        "line_gap": 15.0,
+        "shadow_alpha": 0.8,
+        "shadow_angle": -45.0,
+        "shadow_color": "#000000",
+        "shadow_distance": 8.0,
+        "shadow_point": {
+          "x": 1.0,
+          "y": -1.0
+        },
+        "shadow_smoothing": 1.0,
+        "typesetting": 0,
+        "underline_offset": 0.15,
+        "value": JSON.stringify({ styles: [], text: dialogueText })
+      });
+      
+      // 4. Track Segments
+      videoSegments.push({
+        "cartoon_color_face_id": "",
+        "cartoon_color_face_path": "",
+        "cartoon_color_face_title": "",
+        "clip_settings": {
+          "alpha": 1.0,
+          "flip": { "horizontal": false, "vertical": false },
+          "rotation": 0.0,
+          "scale": { "x": 1.0, "y": 1.0 },
+          "transform": { "x": 0.0, "y": 0.0 }
+        },
+        "common_keyframes": [],
+        "enable_adjust": true,
+        "enable_color_curves": true,
+        "enable_color_wheels": true,
+        "enable_lut": true,
+        "enable_smart_color_adjust": false,
+        "extra_material_refs": [],
+        "id": `segment_video_${scene.id}`,
+        "intensities_keyframes": [],
+        "is_placeholder": false,
+        "keyframe_refs": [],
+        "material_id": `material_video_${scene.id}`,
+        "render_index": 0,
+        "responsive_layout": { "enable": false, "horizontal_pos_type": 0, "horizontal_pos_value": 0.0, "size_type": 0, "size_value": 0.0, "vertical_pos_type": 0, "vertical_pos_value": 0.0 },
+        "reverse": false,
+        "source_timerange": { "duration": sceneDuration, "start": 0 },
+        "speed_control_id": "speed_normal",
+        "target_timerange": { "duration": sceneDuration, "start": cumulativeTime },
+        "track_attribute_flags": 0,
+        "track_id": "track_video_primary",
+        "volume": 1.0
+      });
+      
+      audioSegments.push({
+        "cartoon_color_face_id": "",
+        "cartoon_color_face_path": "",
+        "cartoon_color_face_title": "",
+        "common_keyframes": [],
+        "enable_adjust": true,
+        "extra_material_refs": [],
+        "id": `segment_audio_${scene.id}`,
+        "intensities_keyframes": [],
+        "is_placeholder": false,
+        "keyframe_refs": [],
+        "material_id": `material_audio_${scene.id}`,
+        "render_index": 0,
+        "reverse": false,
+        "source_timerange": { "duration": sceneDuration, "start": 0 },
+        "speed_control_id": "speed_normal",
+        "target_timerange": { "duration": sceneDuration, "start": cumulativeTime },
+        "track_attribute_flags": 0,
+        "track_id": "track_audio_dialogue",
+        "volume": 1.0
+      });
+      
+      textSegments.push({
+        "cartoon_color_face_id": "",
+        "cartoon_color_face_path": "",
+        "cartoon_color_face_title": "",
+        "common_keyframes": [],
+        "enable_adjust": true,
+        "extra_material_refs": [],
+        "id": `segment_text_${scene.id}`,
+        "intensities_keyframes": [],
+        "is_placeholder": false,
+        "keyframe_refs": [],
+        "material_id": `material_text_${scene.id}`,
+        "render_index": 0,
+        "reverse": false,
+        "source_timerange": null,
+        "target_timerange": { "duration": sceneDuration, "start": cumulativeTime },
+        "track_attribute_flags": 0,
+        "track_id": "track_text_subtitle"
+      });
+      
+      cumulativeTime += sceneDuration;
+    }
+    
+    // 5. Process BGM if present
+    const bgmUrl = storyboard.bgm_custom_url || (storyboard.bgm_preset ? `/public/uploads/bgm/preset_${storyboard.bgm_preset}.mp3` : null);
+    let bgmLoaded = false;
+    
+    if (bgmUrl) {
+      const bgmZipPath = `${assetsFolder}/bgm.mp3`;
+      if (bgmUrl.startsWith('/public/')) {
+        const localPath = path.join(__dirname, bgmUrl);
+        if (fs.existsSync(localPath)) {
+          zip.addFile(bgmZipPath, fs.readFileSync(localPath));
+          bgmLoaded = true;
+        }
+      } else if (bgmUrl.startsWith('http')) {
+        bgmLoaded = await downloadToZip(bgmUrl, bgmZipPath);
+      }
+    }
+    
+    if (bgmLoaded) {
+      audioMaterials.push({
+        "category_id": "",
+        "category_name": "",
+        "duration": cumulativeTime,
+        "extra_info": "",
+        "file_EndTime": 0,
+        "file_StartTime": 0,
+        "id": "material_bgm",
+        "import_time": Math.floor(Date.now() / 1000),
+        "import_time_ms": Date.now(),
+        "item_source": 1,
+        "local_id": "",
+        "local_material_id": "",
+        "material_name": "bgm.mp3",
+        "material_status": 0,
+        "path": "assets/bgm.mp3",
+        "type": "music"
+      });
+    }
+
+    // 6. Build tracks array
+    const tracks = [
+      {
+        "attribute_flags": 0,
+        "id": "track_video_primary",
+        "type": "video",
+        "segments": videoSegments
+      },
+      {
+        "attribute_flags": 0,
+        "id": "track_audio_dialogue",
+        "type": "audio",
+        "segments": audioSegments
+      },
+      {
+        "attribute_flags": 0,
+        "id": "track_text_subtitle",
+        "type": "text",
+        "segments": textSegments
+      }
+    ];
+    
+    if (bgmLoaded) {
+      tracks.push({
+        "attribute_flags": 0,
+        "id": "track_audio_bgm",
+        "type": "audio",
+        "segments": [
+          {
+            "cartoon_color_face_id": "",
+            "cartoon_color_face_path": "",
+            "cartoon_color_face_title": "",
+            "common_keyframes": [],
+            "enable_adjust": true,
+            "extra_material_refs": [],
+            "id": "segment_bgm",
+            "intensities_keyframes": [],
+            "is_placeholder": false,
+            "keyframe_refs": [],
+            "material_id": "material_bgm",
+            "render_index": 0,
+            "reverse": false,
+            "source_timerange": { "duration": cumulativeTime, "start": 0 },
+            "speed_control_id": "speed_normal",
+            "target_timerange": { "duration": cumulativeTime, "start": 0 },
+            "volume": 0.3,
+            "track_attribute_flags": 0,
+            "track_id": "track_audio_bgm"
+          }
+        ]
+      });
+    }
+    
+    // 7. Compose draft_content.json
+    const draftContent = {
+      "canvas_config": {
+        "height": 1080,
+        "ratio": "16:9",
+        "width": 1920
+      },
+      "color_space": 0,
+      "config": {
+        "adjust_max_duration_limit": true,
+        "alignment_distance": 2000,
+        "apple_color_space": 0,
+        "attachment_info": [],
+        "background_activity_enabled": true,
+        "color_space": 0,
+        "time_mode": "millisecond"
+      },
+      "duration": cumulativeTime,
+      "materials": {
+        "speeds": [
+          {
+            "id": "speed_normal",
+            "speed": 1.0,
+            "type": "speed"
+          }
+        ],
+        "canvases": [],
+        "videos": videoMaterials,
+        "audios": audioMaterials,
+        "texts": textMaterials
+      },
+      "tracks": tracks
+    };
+    
+    // 8. Compose draft_meta_info.json
+    const draftMetaInfo = {
+      "draft_id": `AI_Comic_Storyboard_${id}`,
+      "draft_name": storyboard.title,
+      "draft_type": "video",
+      "duration": cumulativeTime,
+      "fps": 30.0,
+      "height": 1080,
+      "width": 1920,
+      "tm_draft_modified": Date.now() * 1000
+    };
+    
+    zip.addFile(`${draftFolder}/draft_content.json`, Buffer.from(JSON.stringify(draftContent, null, 2)));
+    zip.addFile(`${draftFolder}/draft_meta_info.json`, Buffer.from(JSON.stringify(draftMetaInfo, null, 2)));
+    
+    // 9. Write ZIP to static upload folder and return
+    const zipFilename = `Storyboard_${id}_JianyingDraft.zip`;
+    const zipFilePath = path.join(uploadsDir, zipFilename);
+    zip.writeZip(zipFilePath);
+    
+    const downloadUrl = `/public/uploads/${zipFilename}`;
+    res.json({ success: true, download_url: downloadUrl, size: fs.statSync(zipFilePath).size });
+  } catch (err) {
+    console.error("生成剪映草稿包失败:", err);
+    res.status(500).json({ error: '剪映草稿包导出失败: ' + err.message });
   }
 });
 
@@ -702,6 +1227,101 @@ app.post('/api/test/tts', async (req, res) => {
   }
 });
 
+// 10.1 空间场景设定舱 CRUD (Scenery/Scene Cabin CRUD)
+app.post('/api/scenery', async (req, res) => {
+  const { storyboard_id, name, environment_prompt } = req.body;
+  if (!storyboard_id || !name) return res.status(400).json({ error: '分镜板ID和场景名不能为空' });
+  try {
+    const result = await run(
+      `INSERT INTO scenery (storyboard_id, name, environment_prompt) VALUES (?, ?, ?)`,
+      [storyboard_id, name, environment_prompt || '']
+    );
+    res.json({ success: true, id: result.lastID });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/scenery/:storyboard_id', async (req, res) => {
+  try {
+    const scenes = await all(`SELECT * FROM scenery WHERE storyboard_id = ? ORDER BY id`, [req.params.storyboard_id]);
+    res.json(scenes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/scenery/:id', async (req, res) => {
+  const { name, image_url, environment_prompt } = req.body;
+  try {
+    await run(
+      `UPDATE scenery SET name = COALESCE(?, name), image_url = COALESCE(?, image_url), environment_prompt = COALESCE(?, environment_prompt) WHERE id = ?`,
+      [name, image_url, environment_prompt, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scenery/:id', async (req, res) => {
+  try {
+    await run(`DELETE FROM scenery WHERE id = ?`, [req.params.id]);
+    // 同时把绑在该场景的分镜场景ID重置为 NULL
+    await run(`UPDATE scenes SET scenery_id = NULL WHERE scenery_id = ?`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 10.2 一键渲染空间场景原画 (Generate Scenery Image)
+app.post('/api/scenery/:id/generate-image', async (req, res) => {
+  const { environment_prompt, image_api_key, image_api_url, image_model_name } = req.body;
+  const sceneId = req.params.id;
+
+  if (!environment_prompt) return res.status(400).json({ error: '空间环境特征描述不能为空' });
+
+  const isDemo = !image_api_key || image_api_key === 'YOUR_IMAGE_KEY_HERE' || image_api_key.trim() === '';
+
+  if (isDemo) {
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    const mockScenery = [
+      "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&q=80",
+      "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&q=80",
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80",
+      "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=800&q=80"
+    ];
+    const mockUrl = mockScenery[sceneId % mockScenery.length];
+    try {
+      await run(`UPDATE scenery SET image_url = ? WHERE id = ?`, [mockUrl, sceneId]);
+      res.json({ success: true, image_url: mockUrl });
+    } catch (dbErr) {
+      res.status(500).json({ error: dbErr.message });
+    }
+  } else {
+    const url = image_api_url || "https://api.siliconflow.cn/v1/images/generations";
+    const model = image_model_name || "black-forest-labs/FLUX.1-schnell";
+    const fullPrompt = `scenery concept art, establishing shot, environment background: ${environment_prompt}, detailed anime style, highly detailed, 8k --ar 16:9`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${image_api_key}` },
+        body: JSON.stringify({ model, prompt: fullPrompt, width: 1024, height: 576, num_inference_steps: 4, batch_size: 1 })
+      });
+      if (!response.ok) throw new Error(`空间场景原画 API 响应失败: ${response.status}`);
+      const result = await response.json();
+      const imageUrl = result.images?.[0]?.url || result.data?.[0]?.url;
+      if (!imageUrl) throw new Error('原画返回中未提取到有效 URL');
+      await run(`UPDATE scenery SET image_url = ? WHERE id = ?`, [imageUrl, sceneId]);
+      res.json({ success: true, image_url: imageUrl });
+    } catch (err) {
+      console.error("空间场景原画渲染失败:", err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
 // 11. 角色演员档案 CRUD (Character Profile Management)
 app.post('/api/characters', async (req, res) => {
   const { storyboard_id, name, role_type, appearance_prompt } = req.body;
@@ -727,11 +1347,11 @@ app.get('/api/characters/:storyboard_id', async (req, res) => {
 });
 
 app.put('/api/characters/:id', async (req, res) => {
-  const { name, role_type, avatar_url, turnaround_url, pose_url, appearance_prompt } = req.body;
+  const { name, role_type, avatar_url, turnaround_url, pose_url, voice_name, appearance_prompt } = req.body;
   try {
     await run(
-      `UPDATE characters SET name = COALESCE(?, name), role_type = COALESCE(?, role_type), avatar_url = COALESCE(?, avatar_url), turnaround_url = COALESCE(?, turnaround_url), pose_url = COALESCE(?, pose_url), appearance_prompt = COALESCE(?, appearance_prompt) WHERE id = ?`,
-      [name, role_type, avatar_url, turnaround_url, pose_url, appearance_prompt, req.params.id]
+      `UPDATE characters SET name = COALESCE(?, name), role_type = COALESCE(?, role_type), avatar_url = COALESCE(?, avatar_url), turnaround_url = COALESCE(?, turnaround_url), pose_url = COALESCE(?, pose_url), voice_name = COALESCE(?, voice_name), appearance_prompt = COALESCE(?, appearance_prompt) WHERE id = ?`,
+      [name, role_type, avatar_url, turnaround_url, pose_url, voice_name, appearance_prompt, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {

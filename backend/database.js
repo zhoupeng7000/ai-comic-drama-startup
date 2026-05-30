@@ -50,6 +50,7 @@ function initDatabase() {
           avatar_url TEXT,
           turnaround_url TEXT,
           pose_url TEXT,
+          voice_name TEXT DEFAULT '故事旁白',
           appearance_prompt TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (storyboard_id) REFERENCES storyboards(id) ON DELETE CASCADE
@@ -58,11 +59,27 @@ function initDatabase() {
         if (err) return reject(err);
       });
 
-      // 动态迁移：characters 表 - 新增三视图与姿态图控制字段
+      // 4. 创建 scenery 空间场景表
+      db.run(`
+        CREATE TABLE IF NOT EXISTS scenery (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          storyboard_id INTEGER NOT NULL,
+          name VARCHAR(50) NOT NULL,
+          image_url TEXT,
+          environment_prompt TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (storyboard_id) REFERENCES storyboards(id) ON DELETE CASCADE
+        )
+      `, (err) => {
+        if (err) return reject(err);
+      });
+
+      // 动态迁移：characters 表 - 新增三视图与姿态图、配音音色控制字段
       db.all("PRAGMA table_info(characters)", (pragmaErr, columns) => {
         if (pragmaErr) return reject(pragmaErr);
         const hasTurnaround = columns.some(col => col.name === 'turnaround_url');
         const hasPose = columns.some(col => col.name === 'pose_url');
+        const hasVoiceName = columns.some(col => col.name === 'voice_name');
 
         const charMigrations = [];
         if (!hasTurnaround) {
@@ -81,17 +98,27 @@ function initDatabase() {
             });
           }));
         }
+        if (!hasVoiceName) {
+          charMigrations.push(new Promise((res, rej) => {
+            db.run("ALTER TABLE characters ADD COLUMN voice_name TEXT DEFAULT '故事旁白'", (alterErr) => {
+              if (alterErr) rej(alterErr);
+              else res();
+            });
+          }));
+        }
 
         Promise.all(charMigrations).catch(err => reject(err));
       });
 
 
-      // 动态迁移：storyboards 表 - 新增画风一致性控制字段
+      // 动态迁移：storyboards 表 - 新增画风一致性控制及全局 BGM 字段
       db.all("PRAGMA table_info(storyboards)", (pragmaErr, columns) => {
         if (pragmaErr) return reject(pragmaErr);
         const hasMasterSeed = columns.some(col => col.name === 'master_seed');
         const hasStyleRefUrl = columns.some(col => col.name === 'style_ref_url');
         const hasStylePreset = columns.some(col => col.name === 'style_preset');
+        const hasBgmPreset = columns.some(col => col.name === 'bgm_preset');
+        const hasBgmCustomUrl = columns.some(col => col.name === 'bgm_custom_url');
 
         const sbMigrations = [];
         if (!hasMasterSeed) {
@@ -118,6 +145,22 @@ function initDatabase() {
             });
           }));
         }
+        if (!hasBgmPreset) {
+          sbMigrations.push(new Promise((res, rej) => {
+            db.run("ALTER TABLE storyboards ADD COLUMN bgm_preset TEXT DEFAULT NULL", (alterErr) => {
+              if (alterErr) rej(alterErr);
+              else res();
+            });
+          }));
+        }
+        if (!hasBgmCustomUrl) {
+          sbMigrations.push(new Promise((res, rej) => {
+            db.run("ALTER TABLE storyboards ADD COLUMN bgm_custom_url TEXT DEFAULT NULL", (alterErr) => {
+              if (alterErr) rej(alterErr);
+              else res();
+            });
+          }));
+        }
 
         Promise.all(sbMigrations).catch(err => reject(err));
       });
@@ -130,6 +173,8 @@ function initDatabase() {
         const hasCharacterIds = columns.some(col => col.name === 'character_ids');
         const hasCameraMotion = columns.some(col => col.name === 'camera_motion');
         const hasMotionIntensity = columns.some(col => col.name === 'motion_intensity');
+        const hasSceneryId = columns.some(col => col.name === 'scenery_id');
+        const hasAudioUrl = columns.some(col => col.name === 'audio_url');
 
         const migrationPromises = [];
         if (!hasImageUrl) {
@@ -167,6 +212,22 @@ function initDatabase() {
         if (!hasMotionIntensity) {
           migrationPromises.push(new Promise((res, rej) => {
             db.run("ALTER TABLE scenes ADD COLUMN motion_intensity VARCHAR(20) DEFAULT 'low'", (alterErr) => {
+              if (alterErr) rej(alterErr);
+              else res();
+            });
+          }));
+        }
+        if (!hasSceneryId) {
+          migrationPromises.push(new Promise((res, rej) => {
+            db.run("ALTER TABLE scenes ADD COLUMN scenery_id INTEGER", (alterErr) => {
+              if (alterErr) rej(alterErr);
+              else res();
+            });
+          }));
+        }
+        if (!hasAudioUrl) {
+          migrationPromises.push(new Promise((res, rej) => {
+            db.run("ALTER TABLE scenes ADD COLUMN audio_url TEXT DEFAULT NULL", (alterErr) => {
               if (alterErr) rej(alterErr);
               else res();
             });
