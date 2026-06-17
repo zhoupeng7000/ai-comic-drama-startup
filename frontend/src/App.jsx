@@ -279,9 +279,12 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.success && currentStoryboard) fetchCharacters(currentStoryboard.id);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error (status: ${res.status})`);
       }
     } catch (err) {
-      alert(`Avatar render failed: ${err.message}`);
+      alert(`头像生成失败: ${err.message}`);
     } finally {
       setGeneratingAvatarId(null);
     }
@@ -303,9 +306,12 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.success && currentStoryboard) fetchCharacters(currentStoryboard.id);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error (status: ${res.status})`);
       }
     } catch (err) {
-      alert(`Turnaround sheet render failed: ${err.message}`);
+      alert(`三视图生成失败: ${err.message}`);
     } finally {
       setGeneratingTurnaroundId(null);
     }
@@ -327,9 +333,12 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.success && currentStoryboard) fetchCharacters(currentStoryboard.id);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error (status: ${res.status})`);
       }
     } catch (err) {
-      alert(`Pose render failed: ${err.message}`);
+      alert(`姿态参考图生成失败: ${err.message}`);
     } finally {
       setGeneratingPoseId(null);
     }
@@ -424,7 +433,15 @@ export default function App() {
       const res = await fetch(`/api/scenery/${sceneryId}/generate-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, stylePreset, masterSeed, styleRefUrl })
+        body: JSON.stringify({
+          environment_prompt: prompt,
+          image_api_key: imageApiKey,
+          image_api_url: imageApiUrl,
+          image_model_name: imageModelName,
+          stylePreset,
+          masterSeed,
+          styleRefUrl
+        })
       });
       if (res.ok) {
         if (currentStoryboard) fetchScenery(currentStoryboard.id);
@@ -579,46 +596,31 @@ export default function App() {
     setConnectionError('');
     const startTime = Date.now();
 
-    // 如果未填写 API KEY，切换为模拟测试通过
     if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_API_KEY_HERE') {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setConnectionLatency(28);
-      setConnectionStatus('success');
+      setConnectionError('请先填写 API Key');
+      setConnectionStatus('error');
       return;
     }
 
     try {
-      const url = apiUrl || "https://api.deepseek.com/v1/chat/completions";
-      const model = modelName || "deepseek-chat";
-
-      const res = await fetch(url, {
+      const res = await fetch('/api/test/llm', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: model,
-          messages: [{ role: 'user', content: 'hi' }],
-          max_tokens: 1
+          api_key: apiKey,
+          api_url: apiUrl,
+          model_name: modelName
         })
       });
 
       const endTime = Date.now();
+      const result = await res.json();
 
-      if (res.ok) {
+      if (res.ok && result.success) {
         setConnectionLatency(endTime - startTime);
         setConnectionStatus('success');
       } else {
-        const errText = await res.text();
-        let errMsg = `请求失败 (状态码: ${res.status})`;
-        try {
-          const parsed = JSON.parse(errText);
-          if (parsed.error && parsed.error.message) {
-            errMsg = parsed.error.message;
-          }
-        } catch(e) {}
-        throw new Error(errMsg);
+        throw new Error(result.error || `连接失败 (状态码: ${res.status})`);
       }
     } catch (err) {
       console.error("测试 API 连通性出错:", err);
@@ -627,50 +629,37 @@ export default function App() {
     }
   };
 
-  // 测试生图 API 连通性 (硅基流动特化优化，不扣除额度)
+  // 测试生图 API 连通性
   const handleTestImageConnection = async () => {
     setImageConnectionStatus('testing');
     setImageConnectionError('');
     const startTime = Date.now();
 
     if (!imageApiKey || imageApiKey.trim() === '' || imageApiKey === 'YOUR_IMAGE_KEY_HERE') {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setImageConnectionLatency(31);
-      setImageConnectionStatus('success');
+      setImageConnectionError('请先填写 API Key');
+      setImageConnectionStatus('error');
       return;
     }
 
     try {
-      const url = imageApiUrl || "https://api.siliconflow.cn/v1/images/generations";
-      const model = imageModelName || "black-forest-labs/FLUX.1-schnell";
-
-      // 如果是硅基流动（SiliconFlow），可以通过免费的 /v1/user/info 查询余额端点测试连通性，不扣除生图额度！
-      const isSiliconFlow = url.includes("siliconflow.cn");
-      const testUrl = isSiliconFlow ? "https://api.siliconflow.cn/v1/user/info" : url;
-
-      const res = await fetch(testUrl, {
-        method: isSiliconFlow ? 'GET' : 'POST',
-        headers: {
-          'Authorization': `Bearer ${imageApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: isSiliconFlow ? null : JSON.stringify({
-          model: model,
-          prompt: 'test',
-          width: 256,
-          height: 256,
-          num_inference_steps: 1,
-          batch_size: 1
+      const res = await fetch('/api/test/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: imageApiKey,
+          api_url: imageApiUrl,
+          model_name: imageModelName
         })
       });
 
       const endTime = Date.now();
+      const result = await res.json();
 
-      if (res.ok) {
+      if (res.ok && result.success) {
         setImageConnectionLatency(endTime - startTime);
         setImageConnectionStatus('success');
       } else {
-        throw new Error(`连接失败 (状态码: ${res.status})`);
+        throw new Error(result.error || `连接失败 (状态码: ${res.status})`);
       }
     } catch (err) {
       console.error("测试生图 API 连通性出错:", err);
@@ -679,16 +668,15 @@ export default function App() {
     }
   };
 
-  // 测试生视频 API 连通性 (New)
+  // 测试生视频 API 连通性
   const handleTestVideoConnection = async () => {
     setVideoConnectionStatus('testing');
     setVideoConnectionError('');
     const startTime = Date.now();
 
     if (!videoApiKey || videoApiKey.trim() === '' || videoApiKey === 'YOUR_VIDEO_KEY_HERE') {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setVideoConnectionLatency(42);
-      setVideoConnectionStatus('success');
+      setVideoConnectionError('请先填写 API Key');
+      setVideoConnectionStatus('error');
       return;
     }
 
@@ -719,16 +707,15 @@ export default function App() {
     }
   };
 
-  // 测试语音合成 API 连通性 (New)
+  // 测试语音合成 API 连通性
   const handleTestTtsConnection = async () => {
     setTtsConnectionStatus('testing');
     setTtsConnectionError('');
     const startTime = Date.now();
 
     if (!ttsApiKey || ttsApiKey.trim() === '' || ttsApiKey === 'YOUR_TTS_KEY_HERE') {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setTtsConnectionLatency(35);
-      setTtsConnectionStatus('success');
+      setTtsConnectionError('请先填写 API Key');
+      setTtsConnectionStatus('error');
       return;
     }
 
@@ -977,13 +964,19 @@ export default function App() {
         video_model_name: videoModelName
       })
     })
-    .then(res => res.json())
+    .then(async res => {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error (status: ${res.status})`);
+      }
+      return res.json();
+    })
     .then(data => {
       if (data.success) {
         setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, video_url: data.video_url } : s));
       }
     })
-    .catch(err => alert(`Video generation failed: ${err.message}`))
+    .catch(err => alert(`视频生成失败: ${err.message}`))
     .finally(() => setGeneratingVideoSceneId(null));
   };
 

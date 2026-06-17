@@ -1164,35 +1164,205 @@ app.post('/api/storyboard/:id/export-jianying', async (req, res) => {
   }
 });
 
-// 9. 测试生视频连通性
-app.post('/api/test/video', async (req, res) => {
+// 9. 测试 LLM 大模型连通性
+app.post('/api/test/llm', async (req, res) => {
   const { api_key, api_url, model_name } = req.body;
   if (!api_key) return res.json({ success: false, error: '未提供 API Key' });
-  
+
   const startTime = Date.now();
-  const url = api_url || "https://api.siliconflow.cn/v1/video/generations";
+  const url = api_url || "https://api.deepseek.com/v1/chat/completions";
+  const model = model_name || "deepseek-chat";
+
+  // 将接口端点后缀替换为 /models，在不触发真实模型调用的情况下，同时验证网关可用性、API Key 有效性与模型型号存在性
+  let modelsUrl = url;
+  if (url.endsWith('/chat/completions') || url.endsWith('/images/generations') || url.endsWith('/video/generations') || url.endsWith('/audio/speech')) {
+    modelsUrl = url.replace(/\/chat\/completions$|\/images\/generations$|\/video\/generations$|\/audio\/speech$/, '/models');
+  } else {
+    modelsUrl = url.endsWith('/') ? `${url}models` : `${url}/models`;
+  }
+
   try {
-    const response = await fetch(url, {
-      method: "POST",
+    const response = await fetch(modelsUrl, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
         "Authorization": `Bearer ${api_key}`
-      },
-      body: JSON.stringify({
-        model: model_name || "luma/aperture-1.0",
-        prompt: "test",
-        stream: false
-      })
+      }
     });
-    
+
     const latency = Date.now() - startTime;
     if (response.status === 401) {
       return res.json({ success: false, error: 'API Key 无效 (401)' });
     }
-    
+    if (response.status === 403) {
+      return res.json({ success: false, error: '无权限访问该模型 (403)' });
+    }
+    if (response.status === 404) {
+      return res.json({ success: false, error: `接口网关错误或未找到 (404)。探测地址: ${modelsUrl}` });
+    }
+    if (response.status === 429) {
+      return res.json({ success: false, error: '接口请求过于频繁或额度已耗尽 (429)' });
+    }
+    if (!response.ok) {
+      const errText = await response.text();
+      let errMsg = `连接失败 (状态码: ${response.status})`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error && parsed.error.message) {
+          errMsg = parsed.error.message;
+        }
+      } catch (e) {}
+      return res.json({ success: false, error: errMsg });
+    }
+
+    const result = await response.json();
+    if (result && Array.isArray(result.data)) {
+      const modelExists = result.data.some(m => m.id === model);
+      if (!modelExists) {
+        const sampleModels = result.data.slice(0, 5).map(m => m.id).join(', ');
+        return res.json({ 
+          success: false, 
+          error: `模型型号 "${model}" 不存在。网关可用，可用模型示例: ${sampleModels}...` 
+        });
+      }
+    }
+
     res.json({ success: true, latency });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '网络连接失败，请检查 API 网关: ' + err.message });
+  }
+});
+
+// 9.1 测试生图 T2I 连通性
+app.post('/api/test/image', async (req, res) => {
+  const { api_key, api_url, model_name } = req.body;
+  if (!api_key) return res.json({ success: false, error: '未提供 API Key' });
+
+  const startTime = Date.now();
+  const url = api_url || "https://api.siliconflow.cn/v1/images/generations";
+  const model = model_name || "black-forest-labs/FLUX.1-schnell";
+
+  let modelsUrl = url;
+  if (url.endsWith('/chat/completions') || url.endsWith('/images/generations') || url.endsWith('/video/generations') || url.endsWith('/audio/speech')) {
+    modelsUrl = url.replace(/\/chat\/completions$|\/images\/generations$|\/video\/generations$|\/audio\/speech$/, '/models');
+  } else {
+    modelsUrl = url.endsWith('/') ? `${url}models` : `${url}/models`;
+  }
+
+  try {
+    const response = await fetch(modelsUrl, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${api_key}`
+      }
+    });
+
+    const latency = Date.now() - startTime;
+    if (response.status === 401) {
+      return res.json({ success: false, error: 'API Key 无效 (401)' });
+    }
+    if (response.status === 403) {
+      return res.json({ success: false, error: '无权限访问该模型 (403)' });
+    }
+    if (response.status === 404) {
+      return res.json({ success: false, error: `接口网关错误或未找到 (404)。探测地址: ${modelsUrl}` });
+    }
+    if (response.status === 429) {
+      return res.json({ success: false, error: '接口请求过于频繁或额度已耗尽 (429)' });
+    }
+    if (!response.ok) {
+      const errText = await response.text();
+      let errMsg = `连接失败 (状态码: ${response.status})`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error && parsed.error.message) {
+          errMsg = parsed.error.message;
+        }
+      } catch (e) {}
+      return res.json({ success: false, error: errMsg });
+    }
+
+    const result = await response.json();
+    if (result && Array.isArray(result.data)) {
+      const modelExists = result.data.some(m => m.id === model);
+      if (!modelExists) {
+        const sampleModels = result.data.slice(0, 5).map(m => m.id).join(', ');
+        return res.json({ 
+          success: false, 
+          error: `模型型号 "${model}" 不存在。网关可用，可用模型示例: ${sampleModels}...` 
+        });
+      }
+    }
+
+    res.json({ success: true, latency });
+  } catch (err) {
+    res.json({ success: false, error: '网络连接失败，请检查 API 网关: ' + err.message });
+  }
+});
+
+// 9.2 测试生视频 T2V 连通性
+app.post('/api/test/video', async (req, res) => {
+  const { api_key, api_url, model_name } = req.body;
+  if (!api_key) return res.json({ success: false, error: '未提供 API Key' });
+
+  const startTime = Date.now();
+  const url = api_url || "https://api.siliconflow.cn/v1/video/generations";
+  const model = model_name || "luma/aperture-1.0";
+
+  let modelsUrl = url;
+  if (url.endsWith('/chat/completions') || url.endsWith('/images/generations') || url.endsWith('/video/generations') || url.endsWith('/audio/speech')) {
+    modelsUrl = url.replace(/\/chat\/completions$|\/images\/generations$|\/video\/generations$|\/audio\/speech$/, '/models');
+  } else {
+    modelsUrl = url.endsWith('/') ? `${url}models` : `${url}/models`;
+  }
+
+  try {
+    const response = await fetch(modelsUrl, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${api_key}`
+      }
+    });
+
+    const latency = Date.now() - startTime;
+    if (response.status === 401) {
+      return res.json({ success: false, error: 'API Key 无效 (401)' });
+    }
+    if (response.status === 403) {
+      return res.json({ success: false, error: '无权限访问该模型 (403)' });
+    }
+    if (response.status === 404) {
+      return res.json({ success: false, error: `接口网关错误或未找到 (404)。探测地址: ${modelsUrl}` });
+    }
+    if (response.status === 429) {
+      return res.json({ success: false, error: '接口请求过于频繁或额度已耗尽 (429)' });
+    }
+    if (!response.ok) {
+      const errText = await response.text();
+      let errMsg = `连接失败 (状态码: ${response.status})`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error && parsed.error.message) {
+          errMsg = parsed.error.message;
+        }
+      } catch (e) {}
+      return res.json({ success: false, error: errMsg });
+    }
+
+    const result = await response.json();
+    if (result && Array.isArray(result.data)) {
+      const modelExists = result.data.some(m => m.id === model);
+      if (!modelExists) {
+        const sampleModels = result.data.slice(0, 5).map(m => m.id).join(', ');
+        return res.json({ 
+          success: false, 
+          error: `模型型号 "${model}" 不存在。网关可用，可用模型示例: ${sampleModels}...` 
+        });
+      }
+    }
+
+    res.json({ success: true, latency });
+  } catch (err) {
+    res.json({ success: false, error: '网络连接失败，请检查 API 网关: ' + err.message });
   }
 });
 
@@ -1203,27 +1373,63 @@ app.post('/api/test/tts', async (req, res) => {
 
   const startTime = Date.now();
   const url = api_url || "https://api.siliconflow.cn/v1/audio/speech";
+  const model = model_name || "FunAudioLLM/CosyVoice2-0.5B";
+
+  let modelsUrl = url;
+  if (url.endsWith('/chat/completions') || url.endsWith('/images/generations') || url.endsWith('/video/generations') || url.endsWith('/audio/speech')) {
+    modelsUrl = url.replace(/\/chat\/completions$|\/images\/generations$|\/video\/generations$|\/audio\/speech$/, '/models');
+  } else {
+    modelsUrl = url.endsWith('/') ? `${url}models` : `${url}/models`;
+  }
+
   try {
-    const response = await fetch(url, {
-      method: "POST",
+    const response = await fetch(modelsUrl, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
         "Authorization": `Bearer ${api_key}`
-      },
-      body: JSON.stringify({
-        model: model_name || "FunAudioLLM/CosyVoice2-0.5B",
-        input: "test",
-        voice: "FunAudioLLM/CosyVoice2-0.5B:alex"
-      })
+      }
     });
 
     const latency = Date.now() - startTime;
     if (response.status === 401) {
       return res.json({ success: false, error: 'API Key 无效 (401)' });
     }
+    if (response.status === 403) {
+      return res.json({ success: false, error: '无权限访问该模型 (403)' });
+    }
+    if (response.status === 404) {
+      return res.json({ success: false, error: `接口网关错误或未找到 (404)。探测地址: ${modelsUrl}` });
+    }
+    if (response.status === 429) {
+      return res.json({ success: false, error: '接口请求过于频繁或额度已耗尽 (429)' });
+    }
+    if (!response.ok) {
+      const errText = await response.text();
+      let errMsg = `连接失败 (状态码: ${response.status})`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error && parsed.error.message) {
+          errMsg = parsed.error.message;
+        }
+      } catch (e) {}
+      return res.json({ success: false, error: errMsg });
+    }
+
+    const result = await response.json();
+    if (result && Array.isArray(result.data)) {
+      const modelExists = result.data.some(m => m.id === model);
+      if (!modelExists) {
+        const sampleModels = result.data.slice(0, 5).map(m => m.id).join(', ');
+        return res.json({ 
+          success: false, 
+          error: `模型型号 "${model}" 不存在。网关可用，可用模型示例: ${sampleModels}...` 
+        });
+      }
+    }
+
     res.json({ success: true, latency });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '网络连接失败，请检查 API 网关: ' + err.message });
   }
 });
 
